@@ -15,6 +15,7 @@ struct ChatTextEditor: NSViewRepresentable {
     var maxHeight: CGFloat = 120
     var onSubmit: (() -> Void)?
     var canSubmit: Bool = true
+    var onRecallLatestQueued: (() -> String?)?
     var onFilesDropped: (([URL]) -> Void)?
     var onImagePasted: ((Data) -> Void)?
 
@@ -263,8 +264,22 @@ final class InputTextView: NSTextView {
             return // swallow — don't insert newline
         }
 
+        // Up Arrow on empty composer → restore the most recent queued prompt
+        if event.keyCode == 126 && flags.isEmpty && string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if recallLatestQueuedMessage() {
+                return
+            }
+        }
+
         // Shift+Return → insert newline (fall through to super)
         super.keyDown(with: event)
+    }
+
+    override func moveUp(_ sender: Any?) {
+        if recallLatestQueuedMessage() {
+            return
+        }
+        super.moveUp(sender)
     }
 
     // MARK: Placeholder drawing
@@ -295,5 +310,21 @@ final class InputTextView: NSTextView {
     override func resignFirstResponder() -> Bool {
         needsDisplay = true
         return super.resignFirstResponder()
+    }
+
+    @discardableResult
+    private func recallLatestQueuedMessage() -> Bool {
+        guard string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let recalledText = inputCoordinator?.parent.onRecallLatestQueued?(),
+              !recalledText.isEmpty else {
+            return false
+        }
+
+        string = recalledText
+        setSelectedRange(NSRange(location: (recalledText as NSString).length, length: 0))
+        inputCoordinator?.parent.text = recalledText
+        inputCoordinator?.recalcHeight()
+        needsDisplay = true
+        return true
     }
 }

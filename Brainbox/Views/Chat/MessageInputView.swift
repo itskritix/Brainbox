@@ -3,12 +3,15 @@ import SwiftUI
 struct MessageInputView: View {
     @Environment(ThemeManager.self) private var themeManager
     @Binding var text: String
-    let isDisabled: Bool
+    let isStreaming: Bool
     @Binding var selectedModel: AIModel
     let models: [AIModel]
     @Binding var showModelPicker: Bool
     let pendingAttachments: [PendingAttachment]
+    let queuedMessagePreviews: [String]
     let onSend: () -> Void
+    let onInterrupt: () -> Void
+    let onRecallLatestQueued: () -> String?
     let onAttachFile: () -> Void
     let onRemoveAttachment: (UUID) -> Void
     var onFilesDropped: (([URL]) -> Void)?
@@ -18,7 +21,7 @@ struct MessageInputView: View {
     var canSend: Bool {
         let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasUploadedAttachments = !pendingAttachments.isEmpty && pendingAttachments.allSatisfy { $0.savedState.isSaved }
-        return (hasText || hasUploadedAttachments) && !isDisabled
+        return hasText || hasUploadedAttachments
     }
 
     private var useGlass: Bool { themeManager.useGlassEffect }
@@ -27,6 +30,12 @@ struct MessageInputView: View {
         let theme = themeManager.colors
 
         VStack(spacing: 0) {
+            if !queuedMessagePreviews.isEmpty {
+                queuedMessagesView
+                    .padding(.horizontal, 14)
+                    .padding(.top, 12)
+            }
+
             // Attachment preview strip
             if !pendingAttachments.isEmpty {
                 AttachmentPreviewStrip(
@@ -59,6 +68,7 @@ struct MessageInputView: View {
                 placeholderColor: NSColor(theme.textTertiary),
                 onSubmit: onSend,
                 canSubmit: canSend,
+                onRecallLatestQueued: onRecallLatestQueued,
                 onFilesDropped: onFilesDropped,
                 onImagePasted: onImagePasted
             )
@@ -110,32 +120,62 @@ struct MessageInputView: View {
     @ViewBuilder
     private var sendButton: some View {
         let theme = themeManager.colors
+        let iconName = isStreaming ? "pause.fill" : "arrow.up"
+        let isButtonEnabled = isStreaming || canSend
+        let fillColor = isButtonEnabled ? theme.accent : theme.surfaceSecondary
 
         if useGlass {
-            Button(action: onSend) {
-                Image(systemName: "arrow.up")
+            Button(action: isStreaming ? onInterrupt : onSend) {
+                Image(systemName: iconName)
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(canSend ? .white : theme.textTertiary)
+                    .foregroundStyle(isButtonEnabled ? .white : theme.textTertiary)
                     .frame(width: 28, height: 28)
             }
             .buttonStyle(.borderless)
             .glassEffect(
-                .regular.tint(canSend ? theme.accent : theme.surfaceSecondary),
+                .regular.tint(fillColor),
                 in: .circle
             )
-            .disabled(!canSend)
+            .disabled(!isButtonEnabled)
         } else {
-            Button(action: onSend) {
-                Image(systemName: "arrow.up")
+            Button(action: isStreaming ? onInterrupt : onSend) {
+                Image(systemName: iconName)
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(canSend ? .white : theme.textTertiary)
+                    .foregroundStyle(isButtonEnabled ? .white : theme.textTertiary)
                     .frame(width: 28, height: 28)
-                    .background(canSend ? theme.accent : theme.surfaceSecondary)
+                    .background(fillColor)
                     .clipShape(Circle())
             }
             .buttonStyle(.borderless)
-            .disabled(!canSend)
+            .disabled(!isButtonEnabled)
         }
+    }
+
+    private var queuedMessagesView: some View {
+        let theme = themeManager.colors
+        let visiblePreviews = Array(queuedMessagePreviews.prefix(2))
+        let hiddenCount = max(queuedMessagePreviews.count - visiblePreviews.count, 0)
+
+        return VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(visiblePreviews.enumerated()), id: \.offset) { _, preview in
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(theme.accent)
+                    Text(preview)
+                        .font(.system(size: 11))
+                        .foregroundStyle(theme.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+
+            if hiddenCount > 0 {
+                Text("+\(hiddenCount) more")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(theme.textTertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var providerWarning: String? {

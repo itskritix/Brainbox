@@ -318,12 +318,15 @@ struct ContentView: View {
 
             MessageInputView(
                 text: $inputText,
-                isDisabled: cvm.isAssistantStreaming,
+                isStreaming: cvm.isAssistantStreaming,
                 selectedModel: Bindable(cvm).selectedModel,
                 models: cvm.availableModels,
                 showModelPicker: $showModelPicker,
                 pendingAttachments: pendingAttachments,
+                queuedMessagePreviews: cvm.queuedMessagePreviews,
                 onSend: { sendMessage() },
+                onInterrupt: { cvm.stopStreaming() },
+                onRecallLatestQueued: { cvm.popLastQueuedMessage() },
                 onAttachFile: { showFilePicker = true },
                 onRemoveAttachment: { id in pendingAttachments.removeAll { $0.id == id } },
                 onFilesDropped: { urls in handleDroppedFiles(urls) },

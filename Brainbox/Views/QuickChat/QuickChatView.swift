@@ -88,7 +88,7 @@ struct QuickChatView: View {
     }
 
     private var canSend: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !cvm.isAssistantStreaming
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     // MARK: - Body
@@ -206,6 +206,12 @@ struct QuickChatView: View {
                     .frame(height: 0.5)
             }
 
+            if !cvm.queuedMessagePreviews.isEmpty {
+                queuedMessagesView
+                    .padding(.horizontal, 18)
+                    .padding(.top, 12)
+            }
+
             TextField("Ask anything", text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 15.5))
@@ -215,6 +221,14 @@ struct QuickChatView: View {
                 .onSubmit { if canSend { send() } }
                 .onKeyPress(keys: [.escape], phases: .down) { _ in
                     onDismiss()
+                    return .handled
+                }
+                .onKeyPress(keys: [.upArrow], phases: .down) { _ in
+                    guard text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                          let recalledText = cvm.popLastQueuedMessage() else {
+                        return .ignored
+                    }
+                    text = recalledText
                     return .handled
                 }
                 .padding(.horizontal, 18)
@@ -232,17 +246,26 @@ struct QuickChatView: View {
 
                 Spacer()
 
-                Button(action: send) {
-                    Image(systemName: "arrow.up")
+                Button {
+                    if cvm.isAssistantStreaming {
+                        cvm.stopStreaming()
+                    } else {
+                        send()
+                    }
+                } label: {
+                    Image(systemName: cvm.isAssistantStreaming ? "pause.fill" : "arrow.up")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(canSend ? .white : theme.textTertiary.opacity(0.35))
+                        .foregroundStyle(
+                            (cvm.isAssistantStreaming || canSend) ? .white : theme.textTertiary.opacity(0.35)
+                        )
                         .frame(width: 32, height: 32)
-                        .background(canSend ? theme.accent : .white.opacity(0.08))
+                        .background((cvm.isAssistantStreaming || canSend) ? theme.accent : .white.opacity(0.08))
                         .clipShape(Circle())
                 }
                 .buttonStyle(.borderless)
-                .disabled(!canSend)
+                .disabled(!cvm.isAssistantStreaming && !canSend)
                 .animation(.easeOut(duration: 0.2), value: canSend)
+                .animation(.easeOut(duration: 0.2), value: cvm.isAssistantStreaming)
             }
             .padding(.horizontal, 14)
             .padding(.bottom, 10)
@@ -252,6 +275,33 @@ struct QuickChatView: View {
     }
 
     // MARK: - Chat Area
+
+    private var queuedMessagesView: some View {
+        let theme = themeManager.colors
+        let previews = Array(cvm.queuedMessagePreviews.prefix(2))
+        let hiddenCount = max(cvm.queuedMessagePreviews.count - previews.count, 0)
+
+        return VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(previews.enumerated()), id: \.offset) { _, preview in
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(theme.accent.opacity(0.9))
+                    Text(preview)
+                        .font(.system(size: 11))
+                        .foregroundStyle(theme.textSecondary.opacity(0.8))
+                        .lineLimit(1)
+                }
+            }
+
+            if hiddenCount > 0 {
+                Text("+\(hiddenCount) more")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(theme.textTertiary.opacity(0.75))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
     private var chatArea: some View {
         ScrollViewReader { proxy in
