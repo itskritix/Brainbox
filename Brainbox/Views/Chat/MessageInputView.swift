@@ -120,12 +120,16 @@ struct MessageInputView: View {
     @ViewBuilder
     private var sendButton: some View {
         let theme = themeManager.colors
-        let iconName = isStreaming ? "pause.fill" : "arrow.up"
-        let isButtonEnabled = isStreaming || canSend
+        // Show pause icon only when streaming AND composer is empty (pure interrupt)
+        let showInterrupt = isStreaming && !canSend
+        let iconName = showInterrupt ? "pause.fill" : "arrow.up"
+        let isButtonEnabled = canSend || isStreaming
         let fillColor = isButtonEnabled ? theme.accent : theme.surfaceSecondary
+        // Has content → send/queue; no content + streaming → interrupt
+        let buttonAction: () -> Void = canSend ? onSend : onInterrupt
 
         if useGlass {
-            Button(action: isStreaming ? onInterrupt : onSend) {
+            Button(action: buttonAction) {
                 Image(systemName: iconName)
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(isButtonEnabled ? .white : theme.textTertiary)
@@ -138,7 +142,7 @@ struct MessageInputView: View {
             )
             .disabled(!isButtonEnabled)
         } else {
-            Button(action: isStreaming ? onInterrupt : onSend) {
+            Button(action: buttonAction) {
                 Image(systemName: iconName)
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(isButtonEnabled ? .white : theme.textTertiary)
@@ -153,29 +157,12 @@ struct MessageInputView: View {
 
     private var queuedMessagesView: some View {
         let theme = themeManager.colors
-        let visiblePreviews = Array(queuedMessagePreviews.prefix(2))
-        let hiddenCount = max(queuedMessagePreviews.count - visiblePreviews.count, 0)
-
-        return VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(visiblePreviews.enumerated()), id: \.offset) { _, preview in
-                HStack(spacing: 6) {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(theme.accent)
-                    Text(preview)
-                        .font(.system(size: 11))
-                        .foregroundStyle(theme.textSecondary)
-                        .lineLimit(1)
-                }
-            }
-
-            if hiddenCount > 0 {
-                Text("+\(hiddenCount) more")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(theme.textTertiary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        return QueuedMessagesPillView(
+            previews: queuedMessagePreviews,
+            accentColor: theme.accent,
+            secondaryTextColor: theme.textSecondary,
+            tertiaryTextColor: theme.textTertiary
+        )
     }
 
     private var providerWarning: String? {

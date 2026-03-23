@@ -247,19 +247,22 @@ struct QuickChatView: View {
                 Spacer()
 
                 Button {
-                    if cvm.isAssistantStreaming {
+                    if canSend {
+                        send()  // sends normally or queues if streaming
+                    } else if cvm.isAssistantStreaming {
                         cvm.stopStreaming()
-                    } else {
-                        send()
                     }
                 } label: {
-                    Image(systemName: cvm.isAssistantStreaming ? "pause.fill" : "arrow.up")
+                    // Show pause only when streaming AND composer is empty (pure interrupt)
+                    let showInterrupt = cvm.isAssistantStreaming && !canSend
+                    let isEnabled = canSend || cvm.isAssistantStreaming
+                    Image(systemName: showInterrupt ? "pause.fill" : "arrow.up")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(
-                            (cvm.isAssistantStreaming || canSend) ? .white : theme.textTertiary.opacity(0.35)
+                            isEnabled ? .white : theme.textTertiary.opacity(0.35)
                         )
                         .frame(width: 32, height: 32)
-                        .background((cvm.isAssistantStreaming || canSend) ? theme.accent : .white.opacity(0.08))
+                        .background(isEnabled ? theme.accent : .white.opacity(0.08))
                         .clipShape(Circle())
                 }
                 .buttonStyle(.borderless)
@@ -278,29 +281,12 @@ struct QuickChatView: View {
 
     private var queuedMessagesView: some View {
         let theme = themeManager.colors
-        let previews = Array(cvm.queuedMessagePreviews.prefix(2))
-        let hiddenCount = max(cvm.queuedMessagePreviews.count - previews.count, 0)
-
-        return VStack(alignment: .leading, spacing: 4) {
-            ForEach(Array(previews.enumerated()), id: \.offset) { _, preview in
-                HStack(spacing: 6) {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(theme.accent.opacity(0.9))
-                    Text(preview)
-                        .font(.system(size: 11))
-                        .foregroundStyle(theme.textSecondary.opacity(0.8))
-                        .lineLimit(1)
-                }
-            }
-
-            if hiddenCount > 0 {
-                Text("+\(hiddenCount) more")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(theme.textTertiary.opacity(0.75))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        return QueuedMessagesPillView(
+            previews: cvm.queuedMessagePreviews,
+            accentColor: theme.accent.opacity(0.9),
+            secondaryTextColor: theme.textSecondary.opacity(0.8),
+            tertiaryTextColor: theme.textTertiary.opacity(0.75)
+        )
     }
 
     private var chatArea: some View {

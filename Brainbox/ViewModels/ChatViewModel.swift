@@ -126,12 +126,13 @@ class ChatViewModel {
     }
 
     func popLastQueuedMessage() -> String? {
-        guard let lastMessage = queuedMessages.last else {
+        guard let lastMessage = queuedMessages.last,
+              !lastMessage.content.isEmpty else {
             return nil
         }
 
         queuedMessages.removeLast()
-        return lastMessage.content.isEmpty ? nil : lastMessage.content
+        return lastMessage.content
     }
 
     func regenerate(messageId: String, conversationId: String) {
@@ -193,7 +194,7 @@ class ChatViewModel {
         if messages.count == 1 {
             dataService.autoTitleConversation(
                 id: queuedMessage.conversationId,
-                firstMessageContent: queuedMessage.content
+                firstMessageContent: queuedMessage.previewText
             )
         }
 
@@ -249,9 +250,13 @@ class ChatViewModel {
         streamingTask = Task {
             do {
                 guard let apiKey = keychainService.apiKey(for: model.provider)?.trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty else {
+                    let errorContent = "Error: No API key configured."
                     self.errorMessage = StreamingError.noAPIKey(model.provider).localizedDescription
-                    self.dataService.finishStreaming(id: assistantMessageId, content: "Error: No API key configured.")
-                    self.refreshMessages()
+                    self.dataService.finishStreaming(id: assistantMessageId, content: errorContent)
+                    self.updateMessage(id: assistantMessageId, content: errorContent, isStreaming: false)
+                    self.activeStream = nil
+                    self.streamingTask = nil
+                    self.queuedMessages.removeAll()
                     return
                 }
 
@@ -296,7 +301,13 @@ class ChatViewModel {
                 self.updateMessage(id: assistantMessageId, content: errorContent, isStreaming: false)
                 self.activeStream = nil
                 self.streamingTask = nil
-                self.processNextQueuedMessage()
+
+                // Only continue queue for recoverable errors; clear queue on auth/config failures
+                if let streamingError = error as? StreamingError, !streamingError.isRecoverable {
+                    self.queuedMessages.removeAll()
+                } else {
+                    self.processNextQueuedMessage()
+                }
             }
         }
     }
