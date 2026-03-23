@@ -22,6 +22,26 @@ jobs:
           echo "Using Xcode at: $XCODE_PATH"
           sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
 
+      - name: Import signing certificate
+        env:
+          P12_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+        run: |
+          echo "$P12_BASE64" | base64 --decode > certificate.p12
+          KEYCHAIN=build.keychain
+          security create-keychain -p "" "$KEYCHAIN"
+          security default-keychain -s "$KEYCHAIN"
+          security unlock-keychain -p "" "$KEYCHAIN"
+          security import certificate.p12 -k "$KEYCHAIN" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN"
+          rm certificate.p12
+
+      - name: Resolve SPM packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project Brainbox.xcodeproj \
+            -scheme Brainbox
+
       - name: Build Release
         run: |
           xcodebuild -project Brainbox.xcodeproj \
@@ -29,18 +49,99 @@ jobs:
             -configuration Release \
             -destination 'platform=macOS' \
             -derivedDataPath build \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_STYLE=Manual \
+            "CODE_SIGN_IDENTITY=Developer ID Application" \
+            DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} \
             build
 
-      - name: Package app
+      - name: Notarize app
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          APP_PATH="build/Build/Products/Release/Brainbox.app"
+
+          # Create zip for notarization submission
+          ditto -c -k --keepParent "$APP_PATH" Brainbox-notarize.zip
+
+          # Submit and wait for notarization
+          xcrun notarytool submit Brainbox-notarize.zip \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+          # Staple the notarization ticket to the app
+          xcrun stapler staple "$APP_PATH"
+
+          rm Brainbox-notarize.zip
+
+      - name: Package signed app
         run: |
           cd build/Build/Products/Release
-          zip -r -y Brainbox.zip Brainbox.app
+          ditto -c -k --keepParent Brainbox.app Brainbox.zip
 
-      - name: Create Release
+      - name: Sign update with Sparkle EdDSA
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          SIGN_UPDATE="build/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update"
+          chmod +x "$SIGN_UPDATE"
+          SIGNATURE=$("$SIGN_UPDATE" build/Build/Products/Release/Brainbox.zip -f "$SPARKLE_PRIVATE_KEY")
+          echo "SPARKLE_SIGNATURE<<EOF" >> "$GITHUB_ENV"
+          echo "$SIGNATURE" >> "$GITHUB_ENV"
+          echo "EOF" >> "$GITHUB_ENV"
+
+      - name: Generate appcast entry
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ZIP_PATH="build/Build/Products/Release/Brainbox.zip"
+          ZIP_SIZE=$(stat -f%z "$ZIP_PATH")
+          PUB_DATE=$(date -R)
+          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/Brainbox.zip"
+
+          cat > appcast_item.xml << XMLEOF
+                <item>
+                    <title>Version ${VERSION}</title>
+                    <pubDate>${PUB_DATE}</pubDate>
+                    <sparkle:version>${VERSION}</sparkle:version>
+                    <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+                    <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+                    <enclosure
+                        url="${DOWNLOAD_URL}"
+                        type="application/octet-stream"
+                        ${SPARKLE_SIGNATURE}
+                        length="${ZIP_SIZE}"
+                    />
+                </item>
+          XMLEOF
+
+          echo "Generated appcast item for v${VERSION}"
+          cat appcast_item.xml
+
+      - name: Update appcast.xml
+        run: |
+          chmod +x scripts/update_appcast.sh
+          ./scripts/update_appcast.sh appcast_item.xml
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: build/Build/Products/Release/Brainbox.zip
           generate_release_notes: true
+
+      - name: Deploy appcast to GitHub Pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Switch to gh-pages branch (create if needed)
+          git fetch origin gh-pages || true
+          git checkout gh-pages 2>/dev/null || git checkout --orphan gh-pages
+
+          # Keep only appcast.xml
+          cp /tmp/appcast.xml appcast.xml 2>/dev/null || true
+          git add appcast.xml
+          git commit -m "Update appcast for ${GITHUB_REF_NAME}" || echo "No changes to commit"
+          git push origin gh-pages

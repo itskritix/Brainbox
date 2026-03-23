@@ -121,10 +121,12 @@ struct SettingsView: View {
 
 private struct GeneralSettingsContent: View {
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(UpdaterManager.self) private var updaterManager
     let dismiss: DismissAction
 
     @State private var draftName = ""
     @State private var isHoveringSave = false
+    @State private var isHoveringCheck = false
 
     private var displayName: String {
         UserDefaults.standard.string(forKey: UDKey.userName) ?? ""
@@ -236,6 +238,74 @@ private struct GeneralSettingsContent: View {
 
                         KeyboardShortcuts.Recorder(for: .toggleQuickChat)
                             .environment(\.colorScheme, .dark)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                }
+
+                // Software Update section
+                settingsGroup(theme: theme) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Automatic Updates")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(theme.textPrimary)
+                            Text("Automatically check for and install updates")
+                                .font(.system(size: 11))
+                                .foregroundStyle(theme.textTertiary)
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: Binding(
+                            get: { updaterManager.automaticallyChecksForUpdates },
+                            set: { updaterManager.automaticallyChecksForUpdates = $0 }
+                        ))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+
+                    settingsDivider(theme: theme)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Version")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(theme.textPrimary)
+
+                            if let lastCheck = updaterManager.lastUpdateCheckDate {
+                                Text("Last checked: \(lastCheck.formatted(date: .abbreviated, time: .shortened))")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(theme.textTertiary)
+                            }
+                        }
+
+                        Spacer()
+
+                        Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(theme.textSecondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(theme.surfacePrimary)
+                            .clipShape(Capsule())
+
+                        Button {
+                            updaterManager.checkForUpdates()
+                        } label: {
+                            Text("Check Now")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 6)
+                                .background(isHoveringCheck ? theme.accentLight : theme.accent)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(!updaterManager.canCheckForUpdates)
+                        .onHover { h in isHoveringCheck = h }
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)

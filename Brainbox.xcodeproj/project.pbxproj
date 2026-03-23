@@ -9,6 +9,9 @@
 /* Begin PBXBuildFile section */
 		24C001012F5A000000E76BA8 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 24C001002F5A000000E76BA8 /* MarkdownUI */; };
 		24D001022F5B000000E76BA8 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 24D001012F5B000000E76BA8 /* KeyboardShortcuts */; };
+		24F786132F6FF3DA009E8C09 /* Downloader.xpc in CopyFiles */ = {isa = PBXBuildFile; fileRef = 24F786102F6FF3D2009E8C09 /* Downloader.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		24F786142F6FF3DE009E8C09 /* Installer.xpc in CopyFiles */ = {isa = PBXBuildFile; fileRef = 24F786112F6FF3D2009E8C09 /* Installer.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		24F786162F6FF5B6009E8C09 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 24F786152F6FF5B6009E8C09 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -28,10 +31,26 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		24F7860F2F6FF240009E8C09 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/XPCServices";
+			dstSubfolderSpec = 16;
+			files = (
+				24F786142F6FF3DE009E8C09 /* Installer.xpc in CopyFiles */,
+				24F786132F6FF3DA009E8C09 /* Downloader.xpc in CopyFiles */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		24B855CB2F598C9600E76BA8 /* Brainbox.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Brainbox.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		24B855DA2F598C9700E76BA8 /* BrainboxTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BrainboxTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		24B855E42F598C9700E76BA8 /* BrainboxUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BrainboxUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		24F786102F6FF3D2009E8C09 /* Downloader.xpc */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.xpc-service"; path = Downloader.xpc; sourceTree = "<group>"; };
+		24F786112F6FF3D2009E8C09 /* Installer.xpc */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.xpc-service"; path = Installer.xpc; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -57,6 +76,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				24F786162F6FF5B6009E8C09 /* Sparkle in Frameworks */,
 				24C001012F5A000000E76BA8 /* MarkdownUI in Frameworks */,
 				24D001022F5B000000E76BA8 /* KeyboardShortcuts in Frameworks */,
 			);
@@ -82,6 +102,7 @@
 		24B855C22F598C9600E76BA8 = {
 			isa = PBXGroup;
 			children = (
+				24F786122F6FF3D2009E8C09 /* XPCServices */,
 				24B855CD2F598C9600E76BA8 /* Brainbox */,
 				24B855DD2F598C9700E76BA8 /* BrainboxTests */,
 				24B855E72F598C9700E76BA8 /* BrainboxUITests */,
@@ -107,6 +128,16 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		24F786122F6FF3D2009E8C09 /* XPCServices */ = {
+			isa = PBXGroup;
+			children = (
+				24F786102F6FF3D2009E8C09 /* Downloader.xpc */,
+				24F786112F6FF3D2009E8C09 /* Installer.xpc */,
+			);
+			name = XPCServices;
+			path = "../../Library/Developer/Xcode/DerivedData/Brainbox-cbbuzjvxpksftydxhvbyiprqwxyz/SourcePackages/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework/Versions/B/XPCServices";
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -117,6 +148,7 @@
 				24B855C72F598C9600E76BA8 /* Sources */,
 				24B855C82F598C9600E76BA8 /* Frameworks */,
 				24B855C92F598C9600E76BA8 /* Resources */,
+				24F7860F2F6FF240009E8C09 /* CopyFiles */,
 			);
 			buildRules = (
 			);
@@ -129,6 +161,7 @@
 			packageProductDependencies = (
 				24C001002F5A000000E76BA8 /* MarkdownUI */,
 				24D001012F5B000000E76BA8 /* KeyboardShortcuts */,
+				24F786152F6FF5B6009E8C09 /* Sparkle */,
 			);
 			productName = Brainbox;
 			productReference = 24B855CB2F598C9600E76BA8 /* Brainbox.app */;
@@ -215,6 +248,7 @@
 			packageReferences = (
 				24C000FE2F5A000000E76BA8 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				24D001002F5B000000E76BA8 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
+				24F7860E2F6FF1FC009E8C09 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 24B855CC2F598C9600E76BA8 /* Products */;
@@ -632,6 +666,14 @@
 				minimumVersion = 2.0.0;
 			};
 		};
+		24F7860E2F6FF1FC009E8C09 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.9.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -644,6 +686,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 24D001002F5B000000E76BA8 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
 			productName = KeyboardShortcuts;
+		};
+		24F786152F6FF5B6009E8C09 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 24F7860E2F6FF1FC009E8C09 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

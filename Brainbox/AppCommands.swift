@@ -19,7 +19,17 @@ extension Notification.Name {
 // MARK: - App Commands
 
 struct AppCommands: Commands {
+    let updaterManager: UpdaterManager
+
     var body: some Commands {
+        // App menu: Check for Updates
+        CommandGroup(after: .appInfo) {
+            Button("Check for Updates…") {
+                updaterManager.checkForUpdates()
+            }
+            .disabled(!updaterManager.canCheckForUpdates)
+        }
+
         // File menu: New Chat (Cmd+N)
         CommandGroup(replacing: .newItem) {
             Button("New Chat") {

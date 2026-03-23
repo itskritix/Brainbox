@@ -6,6 +6,7 @@ struct BrainboxApp: App {
     @State private var themeManager: ThemeManager
     @State private var keychainService: KeychainService
     @State private var quickChatManager: QuickChatManager
+    @State private var updaterManager = UpdaterManager()
 
     init() {
         let tm = ThemeManager()
@@ -19,12 +20,13 @@ struct BrainboxApp: App {
         WindowGroup(id: "main") {
             ContentView(keychainService: keychainService)
                 .environment(themeManager)
+                .environment(updaterManager)
                 .preferredColorScheme(.dark)
                 .modifier(OpenWindowInjector(manager: quickChatManager))
         }
         .defaultSize(width: 1100, height: 720)
         .windowStyle(.hiddenTitleBar)
-        .commands { AppCommands() }
+        .commands { AppCommands(updaterManager: updaterManager) }
     }
 }
 
