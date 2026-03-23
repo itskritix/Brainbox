@@ -4,9 +4,12 @@ import Foundation
 protocol DataServiceProtocol {
     // MARK: - Conversations
     func fetchConversations(profileId: String?) -> [Conversation]
+    func fetchArchivedConversations(profileId: String?) -> [Conversation]
     func createConversation(title: String?, profileId: String?) -> Conversation
     func deleteConversation(id: String)
     func renameConversation(id: String, title: String)
+    func archiveConversation(id: String)
+    func unarchiveConversation(id: String)
     func updateConversationModel(id: String, modelId: String, provider: String)
 
     // MARK: - Messages

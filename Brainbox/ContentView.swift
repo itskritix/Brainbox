@@ -607,7 +607,12 @@ private struct ShortcutHandlers: ViewModifier {
                 showSettings = true
             }
             .sheet(isPresented: $showSettings) {
-                SettingsView(keychainService: keychainService, profileVM: profileVM, selectedTab: settingsTab)
+                SettingsView(
+                    keychainService: keychainService,
+                    profileVM: profileVM,
+                    conversationListVM: conversationListVM,
+                    selectedTab: settingsTab
+                )
             }
     }
 }

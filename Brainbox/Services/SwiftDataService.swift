@@ -10,20 +10,11 @@ final class SwiftDataService: DataServiceProtocol {
     // MARK: - Conversations
 
     func fetchConversations(profileId: String?) -> [Conversation] {
-        let results: [SDConversation]
-        if let profileId, let uuid = UUID(uuidString: profileId) {
-            let descriptor = FetchDescriptor<SDConversation>(
-                predicate: #Predicate { $0.profileId == uuid },
-                sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-            )
-            results = (try? context.fetch(descriptor)) ?? []
-        } else {
-            let descriptor = FetchDescriptor<SDConversation>(
-                sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-            )
-            results = (try? context.fetch(descriptor)) ?? []
-        }
-        return results.map { Conversation(from: $0) }
+        fetchConversations(profileId: profileId, isArchived: false)
+    }
+
+    func fetchArchivedConversations(profileId: String?) -> [Conversation] {
+        fetchConversations(profileId: profileId, isArchived: true)
     }
 
     func createConversation(title: String?, profileId: String?) -> Conversation {
@@ -46,6 +37,20 @@ final class SwiftDataService: DataServiceProtocol {
     func renameConversation(id: String, title: String) {
         guard let sd = fetchSDConversation(id: id) else { return }
         sd.title = title
+        sd.updatedAt = Date()
+        try? context.save()
+    }
+
+    func archiveConversation(id: String) {
+        guard let sd = fetchSDConversation(id: id) else { return }
+        sd.isArchived = true
+        sd.updatedAt = Date()
+        try? context.save()
+    }
+
+    func unarchiveConversation(id: String) {
+        guard let sd = fetchSDConversation(id: id) else { return }
+        sd.isArchived = false
         sd.updatedAt = Date()
         try? context.save()
     }
@@ -306,6 +311,27 @@ final class SwiftDataService: DataServiceProtocol {
         )
         descriptor.fetchLimit = 1
         return (try? context.fetch(descriptor))?.first
+    }
+
+    private func fetchConversations(profileId: String?, isArchived: Bool) -> [Conversation] {
+        let results: [SDConversation]
+
+        if let profileId, let uuid = UUID(uuidString: profileId) {
+            let descriptor = FetchDescriptor<SDConversation>(
+                predicate: #Predicate { $0.profileId == uuid },
+                sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+            )
+            results = (try? context.fetch(descriptor)) ?? []
+        } else {
+            let descriptor = FetchDescriptor<SDConversation>(
+                sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+            )
+            results = (try? context.fetch(descriptor)) ?? []
+        }
+
+        return results
+            .map { Conversation(from: $0) }
+            .filter { $0.isArchived == isArchived }
     }
 }
 

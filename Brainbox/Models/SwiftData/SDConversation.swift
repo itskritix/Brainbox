@@ -6,6 +6,7 @@ final class SDConversation {
     @Attribute(.unique) var id: UUID
     var profileId: UUID?
     var title: String
+    var isArchived: Bool?
     var lastModelUsed: String?
     var lastProviderUsed: String?
     var createdAt: Date
@@ -21,6 +22,7 @@ final class SDConversation {
         id: UUID = UUID(),
         profileId: UUID? = nil,
         title: String = "New Chat",
+        isArchived: Bool? = nil,
         lastModelUsed: String? = nil,
         lastProviderUsed: String? = nil,
         createdAt: Date = Date(),
@@ -29,6 +31,7 @@ final class SDConversation {
         self.id = id
         self.profileId = profileId
         self.title = title
+        self.isArchived = isArchived
         self.lastModelUsed = lastModelUsed
         self.lastProviderUsed = lastProviderUsed
         self.createdAt = createdAt

@@ -5,6 +5,7 @@ enum SettingsTab: String, CaseIterable {
     case general
     case apiKeys
     case profiles
+    case dataControls
     case shortcuts
 }
 
@@ -14,6 +15,7 @@ struct SettingsView: View {
 
     let keychainService: KeychainService
     var profileVM: ProfileViewModel
+    var conversationListVM: ConversationListViewModel
     @State var selectedTab: SettingsTab
 
     var body: some View {
@@ -38,6 +40,8 @@ struct SettingsView: View {
                         APIKeysSettingsContent(keychainService: keychainService)
                     case .profiles:
                         ProfilesSettingsContent(profileVM: profileVM)
+                    case .dataControls:
+                        DataControlsSettingsContent(conversationListVM: conversationListVM)
                     case .shortcuts:
                         ShortcutsSettingsContent()
                     }
@@ -76,6 +80,7 @@ struct SettingsView: View {
             sidebarItem(icon: "gearshape", label: "General", tab: .general, theme: theme)
             sidebarItem(icon: "key", label: "API Keys", tab: .apiKeys, theme: theme)
             sidebarItem(icon: "person.2", label: "Profiles", tab: .profiles, theme: theme)
+            sidebarItem(icon: "archivebox", label: "Data Controls", tab: .dataControls, theme: theme)
             sidebarItem(icon: "keyboard", label: "Shortcuts", tab: .shortcuts, theme: theme)
 
             Spacer()
@@ -592,6 +597,131 @@ private struct ProfilesSettingsContent: View {
         .buttonStyle(.borderless)
     }
 
+}
+
+// MARK: - Data Controls Settings
+
+private struct DataControlsSettingsContent: View {
+    @Environment(ThemeManager.self) private var themeManager
+    var conversationListVM: ConversationListViewModel
+    @State private var archivedConversations: [Conversation] = []
+
+    var body: some View {
+        let theme = themeManager.colors
+        let archived = archivedConversations
+
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Data Controls")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(theme.textPrimary)
+
+                    Text("Review archived chats and restore them to the sidebar when needed.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(theme.textTertiary)
+                }
+                .padding(.trailing, 36)
+
+                settingsGroup(theme: theme) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Archived Chats")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(theme.textPrimary)
+                            Text("\(archived.count) archived \(archived.count == 1 ? "chat" : "chats")")
+                                .font(.system(size: 11))
+                                .foregroundStyle(theme.textTertiary)
+                        }
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+
+                    if archived.isEmpty {
+                        settingsDivider(theme: theme)
+
+                        Text("No archived chats yet.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(theme.textTertiary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                    } else {
+                        ForEach(Array(archived.enumerated()), id: \.element.id) { index, conversation in
+                            if index > 0 {
+                                settingsDivider(theme: theme)
+                            }
+
+                            archivedConversationRow(conversation, theme: theme)
+                        }
+                    }
+                }
+            }
+            .padding(24)
+        }
+        .onAppear {
+            reloadArchivedConversations()
+        }
+    }
+
+    private func archivedConversationRow(_ conversation: Conversation, theme: AppThemeColors) -> some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(conversation.title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(theme.textPrimary)
+                    .lineLimit(1)
+
+                Text("Updated \(formattedDate(conversation.updatedAt))")
+                    .font(.system(size: 11))
+                    .foregroundStyle(theme.textTertiary)
+            }
+
+            Spacer()
+
+            Button {
+                conversationListVM.unarchiveConversation(id: conversation.id)
+                reloadArchivedConversations()
+            } label: {
+                Text("Restore")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(theme.accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(theme.accent.opacity(0.12))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.borderless)
+            .help("Restore chat to the sidebar")
+
+            Button(role: .destructive) {
+                conversationListVM.deleteConversation(id: conversation.id)
+                reloadArchivedConversations()
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(theme.error)
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.borderless)
+            .help("Delete archived chat")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private func formattedDate(_ timestamp: Double) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: Date(timeIntervalSince1970: timestamp / 1000))
+    }
+
+    private func reloadArchivedConversations() {
+        archivedConversations = conversationListVM.fetchArchivedConversations()
+    }
 }
 
 // MARK: - Shortcuts Settings

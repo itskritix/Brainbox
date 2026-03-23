@@ -368,7 +368,12 @@ struct SidebarView: View {
             calculateInitialLimits()
         }
         .sheet(isPresented: $showProfileEditor) {
-            SettingsView(keychainService: keychainService, profileVM: profileVM, selectedTab: .general)
+            SettingsView(
+                keychainService: keychainService,
+                profileVM: profileVM,
+                conversationListVM: viewModel,
+                selectedTab: .general
+            )
         }
         .sheet(isPresented: $showCreateProfile) {
             CreateProfileView { name, emoji in
@@ -400,6 +405,12 @@ struct SidebarView: View {
             },
             onRename: { newTitle in
                 viewModel.renameConversation(id: conversation.id, title: newTitle)
+            },
+            onArchive: {
+                if selectedConversationId == conversation.id {
+                    selectedConversationId = nil
+                }
+                viewModel.archiveConversation(id: conversation.id)
             },
             onDelete: {
                 if selectedConversationId == conversation.id {

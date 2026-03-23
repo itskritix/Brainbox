@@ -7,6 +7,7 @@ struct ConversationRow: View {
     let isSelected: Bool
     let onSelect: () -> Void
     let onRename: (String) -> Void
+    let onArchive: () -> Void
     let onDelete: () -> Void
     @State private var isHovered = false
 
@@ -32,12 +33,31 @@ struct ConversationRow: View {
 
                 Spacer()
 
+                Button(action: onArchive) {
+                    Image(systemName: "archivebox")
+                        .font(.system(size: 11))
+                        .foregroundStyle(theme.textTertiary)
+                }
+                .buttonStyle(.borderless)
+                .help("Archive chat")
+                .opacity(isHovered ? 1 : 0)
+                .allowsHitTesting(isHovered)
+                .onHover { hovering in
+                    if hovering {
+                        NSCursor.pointingHand.push()
+                    } else {
+                        NSCursor.pop()
+                    }
+                }
+                .padding(.trailing, 8)
+
                 Button(action: onDelete) {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
                         .foregroundStyle(theme.textTertiary)
                 }
                 .buttonStyle(.borderless)
+                .help("Delete chat")
                 .opacity(isHovered ? 1 : 0)
                 .allowsHitTesting(isHovered)
                 .onHover { hovering in
@@ -75,6 +95,9 @@ struct ConversationRow: View {
         .contextMenu {
             Button("Rename...") {
                 promptRename()
+            }
+            Button("Archive") {
+                onArchive()
             }
             Divider()
             Button("Delete", role: .destructive) {
