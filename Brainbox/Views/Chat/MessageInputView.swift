@@ -8,7 +8,7 @@ struct MessageInputView: View {
     let models: [AIModel]
     @Binding var showModelPicker: Bool
     let pendingAttachments: [PendingAttachment]
-    let queuedMessagePreviews: [String]
+    let queuedMessagePreviews: [QueuedMessagesPillView.QueuedPreview]
     let onSend: () -> Void
     let onInterrupt: () -> Void
     let onRecallLatestQueued: () -> String?
@@ -120,9 +120,12 @@ struct MessageInputView: View {
     @ViewBuilder
     private var sendButton: some View {
         let theme = themeManager.colors
-        // Show pause icon only when streaming AND composer is empty (pure interrupt)
+        // Streaming + no content → interrupt (pause icon)
+        // Streaming + has content → queue (adds to queue, shown as "text.append" icon)
+        // Not streaming + has content → send (arrow up icon)
         let showInterrupt = isStreaming && !canSend
-        let iconName = showInterrupt ? "pause.fill" : "arrow.up"
+        let showQueue = isStreaming && canSend
+        let iconName = showInterrupt ? "pause.fill" : (showQueue ? "text.append" : "arrow.up")
         let isButtonEnabled = canSend || isStreaming
         let fillColor = isButtonEnabled ? theme.accent : theme.surfaceSecondary
         // Has content → send/queue; no content + streaming → interrupt
@@ -141,6 +144,7 @@ struct MessageInputView: View {
                 in: .circle
             )
             .disabled(!isButtonEnabled)
+            .animation(.easeOut(duration: 0.2), value: iconName)
         } else {
             Button(action: buttonAction) {
                 Image(systemName: iconName)
@@ -152,6 +156,7 @@ struct MessageInputView: View {
             }
             .buttonStyle(.borderless)
             .disabled(!isButtonEnabled)
+            .animation(.easeOut(duration: 0.2), value: iconName)
         }
     }
 

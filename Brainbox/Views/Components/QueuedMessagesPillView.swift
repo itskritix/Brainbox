@@ -1,14 +1,20 @@
 import SwiftUI
 
 struct QueuedMessagesPillView: View {
-    let previews: [String]
+    let previews: [QueuedPreview]
     let accentColor: Color
     let secondaryTextColor: Color
     let tertiaryTextColor: Color
     let maxVisible: Int
 
+    /// A stable-identity wrapper for queued message previews.
+    struct QueuedPreview: Identifiable {
+        let id: UUID
+        let text: String
+    }
+
     init(
-        previews: [String],
+        previews: [QueuedPreview],
         accentColor: Color,
         secondaryTextColor: Color,
         tertiaryTextColor: Color,
@@ -26,12 +32,12 @@ struct QueuedMessagesPillView: View {
         let hiddenCount = max(previews.count - visiblePreviews.count, 0)
 
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(Array(visiblePreviews.enumerated()), id: \.offset) { _, preview in
+            ForEach(visiblePreviews) { preview in
                 HStack(spacing: 6) {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(accentColor)
-                    Text(preview)
+                    Text(preview.text)
                         .font(.system(size: 11))
                         .foregroundStyle(secondaryTextColor)
                         .lineLimit(1)

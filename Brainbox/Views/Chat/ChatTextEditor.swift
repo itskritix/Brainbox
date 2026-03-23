@@ -275,13 +275,6 @@ final class InputTextView: NSTextView {
         super.keyDown(with: event)
     }
 
-    override func moveUp(_ sender: Any?) {
-        if recallLatestQueuedMessage() {
-            return
-        }
-        super.moveUp(sender)
-    }
-
     // MARK: Placeholder drawing
 
     override func draw(_ dirtyRect: NSRect) {

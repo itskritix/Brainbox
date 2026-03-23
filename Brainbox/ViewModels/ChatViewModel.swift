@@ -52,12 +52,19 @@ class ChatViewModel {
         self.keychainService = keychainService
     }
 
+    /// Whether the assistant is currently streaming a response.
+    /// Uses both the derived message state and the active task as a safety check.
     var isAssistantStreaming: Bool {
-        messages.last?.isAssistant == true && messages.last?.isStreaming == true
+        streamingTask != nil || (messages.last?.isAssistant == true && messages.last?.isStreaming == true)
     }
 
-    var queuedMessagePreviews: [String] {
-        queuedMessages.map(\.previewText)
+    /// Whether there are messages waiting to be sent after the current stream finishes.
+    var hasQueuedMessages: Bool {
+        !queuedMessages.isEmpty
+    }
+
+    var queuedMessagePreviews: [QueuedMessagesPillView.QueuedPreview] {
+        queuedMessages.map { QueuedMessagesPillView.QueuedPreview(id: $0.id, text: $0.previewText) }
     }
 
     func loadConversation(_ conversationId: String, initialMessages: [Message] = []) {
@@ -99,6 +106,11 @@ class ChatViewModel {
     func send(content: String, conversationId: String, attachmentIds: [String] = []) {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !attachmentIds.isEmpty else {
+            return
+        }
+
+        // Only allow queuing for the currently active conversation
+        guard conversationId == activeConversationId else {
             return
         }
 
@@ -150,11 +162,6 @@ class ChatViewModel {
             providerName: selectedModel.provider
         )
 
-        activeStream = ActiveStream(
-            assistantMessageId: messageId,
-            conversationId: conversationId,
-            content: ""
-        )
         startStreaming(
             assistantMessageId: messageId,
             conversationId: conversationId,
@@ -216,11 +223,6 @@ class ChatViewModel {
         )
 
         let assistantId = assistantMsg.id
-        activeStream = ActiveStream(
-            assistantMessageId: assistantId,
-            conversationId: queuedMessage.conversationId,
-            content: ""
-        )
         startStreaming(
             assistantMessageId: assistantId,
             conversationId: queuedMessage.conversationId,
@@ -235,6 +237,14 @@ class ChatViewModel {
 
     private func startStreaming(assistantMessageId: String, conversationId: String, model: AIModel) {
         streamingTask?.cancel()
+        streamingTask = nil
+
+        // Single source of truth: activeStream is always set here
+        activeStream = ActiveStream(
+            assistantMessageId: assistantMessageId,
+            conversationId: conversationId,
+            content: ""
+        )
 
         let currentMessages = messages.filter { $0.id != assistantMessageId }
 
@@ -250,12 +260,12 @@ class ChatViewModel {
         streamingTask = Task {
             do {
                 guard let apiKey = keychainService.apiKey(for: model.provider)?.trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty else {
-                    let errorContent = "Error: No API key configured."
+                    let errorContent = "Error: No API key configured for \(model.provider)."
                     self.errorMessage = StreamingError.noAPIKey(model.provider).localizedDescription
                     self.dataService.finishStreaming(id: assistantMessageId, content: errorContent)
                     self.updateMessage(id: assistantMessageId, content: errorContent, isStreaming: false)
-                    self.activeStream = nil
-                    self.streamingTask = nil
+                    self.cleanupStreamState()
+                    // Non-recoverable: clear the entire queue
                     self.queuedMessages.removeAll()
                     return
                 }
@@ -288,9 +298,8 @@ class ChatViewModel {
 
                 self.dataService.finishStreaming(id: assistantMessageId, content: fullContent)
                 self.updateMessage(id: assistantMessageId, content: fullContent, isStreaming: false)
-                self.activeStream = nil
-                self.streamingTask = nil
                 self.errorMessage = nil
+                self.cleanupStreamState()
                 self.processNextQueuedMessage()
             } catch {
                 guard !Task.isCancelled else { return }
@@ -299,8 +308,7 @@ class ChatViewModel {
                 self.dataService.finishStreaming(id: assistantMessageId, content: errorContent)
                 self.errorMessage = error.localizedDescription
                 self.updateMessage(id: assistantMessageId, content: errorContent, isStreaming: false)
-                self.activeStream = nil
-                self.streamingTask = nil
+                self.cleanupStreamState()
 
                 // Only continue queue for recoverable errors; clear queue on auth/config failures
                 if let streamingError = error as? StreamingError, !streamingError.isRecoverable {
@@ -310,6 +318,13 @@ class ChatViewModel {
                 }
             }
         }
+    }
+
+    /// Clears the streaming task and active stream state. Call after streaming ends
+    /// (success, error, or cancellation) to prevent stale state.
+    private func cleanupStreamState() {
+        streamingTask = nil
+        activeStream = nil
     }
 
     private func cancelStreaming(finalizeCurrentMessage: Bool, continueQueue: Bool) {
@@ -323,8 +338,7 @@ class ChatViewModel {
         }
 
         streamingTask?.cancel()
-        streamingTask = nil
-        activeStream = nil
+        cleanupStreamState()
 
         if continueQueue {
             processNextQueuedMessage()
@@ -332,12 +346,19 @@ class ChatViewModel {
     }
 
     private func processNextQueuedMessage() {
-        guard !isAssistantStreaming, !queuedMessages.isEmpty else {
+        // Guard: don't start a new stream if one is already running
+        guard streamingTask == nil, !queuedMessages.isEmpty else {
             return
         }
 
-        let nextMessage = queuedMessages.removeFirst()
-        activeConversationId = nextMessage.conversationId
-        sendNow(nextMessage)
+        // Only process messages for the currently active conversation.
+        // If the user navigated away, discard stale queued messages silently.
+        while let next = queuedMessages.first {
+            queuedMessages.removeFirst()
+            if next.conversationId == activeConversationId {
+                sendNow(next)
+                return
+            }
+        }
     }
 }

@@ -253,10 +253,14 @@ struct QuickChatView: View {
                         cvm.stopStreaming()
                     }
                 } label: {
-                    // Show pause only when streaming AND composer is empty (pure interrupt)
+                    // Streaming + no content → interrupt (pause icon)
+                    // Streaming + has content → queue (text.append icon)
+                    // Not streaming + has content → send (arrow up icon)
                     let showInterrupt = cvm.isAssistantStreaming && !canSend
+                    let showQueue = cvm.isAssistantStreaming && canSend
                     let isEnabled = canSend || cvm.isAssistantStreaming
-                    Image(systemName: showInterrupt ? "pause.fill" : "arrow.up")
+                    let iconName = showInterrupt ? "pause.fill" : (showQueue ? "text.append" : "arrow.up")
+                    Image(systemName: iconName)
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(
                             isEnabled ? .white : theme.textTertiary.opacity(0.35)

@@ -416,8 +416,9 @@ enum StreamingError: LocalizedError {
         case .invalidResponse:
             return true
         case .apiError(let statusCode, _):
-            // 401/403 = auth errors (non-recoverable), 429 = rate limit (recoverable), 5xx = server errors (recoverable)
-            return statusCode >= 429
+            // 429 = rate limit (recoverable), 5xx = server errors (recoverable)
+            // 4xx (except 429) = client errors like auth/bad request (non-recoverable)
+            return statusCode == 429 || statusCode >= 500
         }
     }
 }
