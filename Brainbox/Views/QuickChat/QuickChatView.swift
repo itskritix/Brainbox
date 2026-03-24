@@ -224,12 +224,11 @@ struct QuickChatView: View {
                     return .handled
                 }
                 .onKeyPress(keys: [.upArrow], phases: .down) { _ in
-                    guard text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                          let recalledText = cvm.popLastQueuedMessage() else {
-                        return .ignored
-                    }
-                    text = recalledText
-                    return .handled
+                    recallLatestQueuedMessage() ? .handled : .ignored
+                }
+                .onMoveCommand { direction in
+                    guard direction == .up else { return }
+                    _ = recallLatestQueuedMessage()
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 14)
@@ -291,6 +290,17 @@ struct QuickChatView: View {
             secondaryTextColor: theme.textSecondary.opacity(0.8),
             tertiaryTextColor: theme.textTertiary.opacity(0.75)
         )
+    }
+
+    @discardableResult
+    private func recallLatestQueuedMessage() -> Bool {
+        guard text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let recalledText = cvm.popLastQueuedMessage() else {
+            return false
+        }
+
+        text = recalledText
+        return true
     }
 
     private var chatArea: some View {
