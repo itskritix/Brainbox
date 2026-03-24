@@ -148,11 +148,15 @@ struct SidebarView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 12))
                     .foregroundStyle(theme.textTertiary)
-                TextField("Search your threads...", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12))
-                    .foregroundStyle(theme.textPrimary)
-                    .focused($isSearchFocused)
+                MacSearchField(
+                    text: $searchText,
+                    placeholder: "Search your threads...",
+                    font: .systemFont(ofSize: 12),
+                    textColor: NSColor(theme.textPrimary),
+                    placeholderColor: NSColor(theme.textTertiary),
+                    isFocused: isSearchFocused
+                )
+                .frame(height: 18)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
