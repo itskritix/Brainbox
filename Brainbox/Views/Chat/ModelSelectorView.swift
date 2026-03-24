@@ -430,6 +430,10 @@ private func iconKey(for model: AIModel) -> String {
         return "meta"
     }
 
+    if model.id.hasPrefix("moonshotai/") {
+        return "moonshot"
+    }
+
     return model.provider
 }
 
@@ -444,6 +448,7 @@ private func creatorName(for model: AIModel) -> String {
     case "google": return "Google"
     case "meta": return "Meta"
     case "mistral": return "Mistral"
+    case "moonshot": return "Moonshot"
     case "openai": return "OpenAI"
     case "qwen": return "Qwen"
     case "xai": return "xAI"
@@ -458,6 +463,7 @@ private func assetForProviderKey(_ key: String) -> String? {
     case "google": return "ProviderGoogle"
     case "meta": return "ProviderMeta"
     case "mistral": return "ProviderMistral"
+    case "moonshot": return "ProviderMoonshot"
     case "openai": return "ProviderOpenAI"
     case "xai": return "ProviderXAI"
     default: return nil
@@ -467,6 +473,7 @@ private func assetForProviderKey(_ key: String) -> String? {
 private func iconScaleForKey(_ key: String) -> CGFloat {
     switch key {
     case "deepseek": return 1.8
+    case "moonshot": return 1.4
     default: return 1
     }
 }
@@ -482,6 +489,7 @@ func iconForProvider(_ provider: String) -> String {
     case "xai": return "bolt"
     case "deepseek": return "magnifyingglass"
     case "groq": return "hare"
+    case "moonshot": return "moon"
     default: return "cpu"
     }
 }
@@ -495,6 +503,7 @@ private func colorForProvider(_ provider: String, theme: AppThemeColors) -> Colo
     case "xai": return .purple
     case "deepseek": return .cyan
     case "groq": return .pink
+    case "moonshot": return Color(red: 0.2, green: 0.2, blue: 0.2)
     default: return theme.textSecondary
     }
 }

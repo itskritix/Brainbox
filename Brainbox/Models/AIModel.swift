@@ -87,4 +87,5 @@ let defaultModels: [AIModel] = [
     AIModel(id: "meta-llama/llama-4-scout-17b-16e-instruct", name: "Llama 4 Scout", provider: "groq", providerName: "Groq"),
     AIModel(id: "qwen/qwen3-32b", name: "Qwen3 32B", provider: "groq", providerName: "Groq"),
     AIModel(id: "openai/gpt-oss-120b", name: "GPT-OSS 120B", provider: "groq", providerName: "Groq"),
+    AIModel(id: "moonshotai/kimi-k2-instruct-0905", name: "Kimi K2", provider: "groq", providerName: "Groq"),
 ]
