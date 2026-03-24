@@ -11,7 +11,7 @@ struct AttachmentGrid: View {
     var body: some View {
         let theme = themeManager.colors
 
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .trailing, spacing: 6) {
             // Image grid
             if !images.isEmpty {
                 imageGrid(theme: theme)
@@ -37,19 +37,25 @@ struct AttachmentGrid: View {
                     gridImage(img, theme: theme)
                 }
             }
-            .frame(maxWidth: 260)
+            .frame(maxWidth: 320)
         }
     }
 
     private func singleImage(_ attachment: MessageAttachment, theme: AppThemeColors) -> some View {
         Group {
             if let path = attachment.url, let nsImage = NSImage(contentsOfFile: path) {
+                let pixelW = CGFloat(nsImage.representations.first?.pixelsWide ?? Int(nsImage.size.width))
+                let pixelH = CGFloat(nsImage.representations.first?.pixelsHigh ?? Int(nsImage.size.height))
+                let aspectRatio = pixelW / max(pixelH, 1)
+                let maxW: CGFloat = 360
+                let maxH: CGFloat = 400
+                let displayWidth = min(maxW, maxH * aspectRatio)
+                let displayHeight = displayWidth / max(aspectRatio, 0.01)
+
                 Image(nsImage: nsImage)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: 260, maxHeight: 260)
+                    .frame(width: displayWidth, height: displayHeight)
                     .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusMedium))
-                    .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
             } else {
                 imagePlaceholder(theme: theme, failed: true)
                     .frame(width: 200, height: 140)

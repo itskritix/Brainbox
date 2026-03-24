@@ -50,14 +50,17 @@ struct MessageBubble: View, Equatable {
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             if message.isUser {
-                Spacer(minLength: 60)
+                Spacer()
+                    .frame(minWidth: 60)
+                    .layoutPriority(-1)
                 userBubble
             } else {
                 assistantBubble
                 Spacer(minLength: 0)
             }
         }
-        .padding(.horizontal, 24)
+        .padding(.leading, 16)
+        .padding(.trailing, message.isUser ? 0 : 16)
         .padding(.vertical, message.isUser ? 6 : 12)
         .onChange(of: message.content, initial: true) {
             guard message.isAssistant, message.isStreaming else { return }
@@ -88,7 +91,6 @@ struct MessageBubble: View, Equatable {
             // Attachments — displayed OUTSIDE the text bubble, right-aligned
             if hasAttachments {
                 AttachmentGrid(attachments: message.attachments!)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
             // Text content in its own bubble
@@ -108,6 +110,7 @@ struct MessageBubble: View, Equatable {
                     .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusLarge))
             }
         }
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     private var assistantBubble: some View {
