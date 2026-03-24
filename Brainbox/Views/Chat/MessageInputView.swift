@@ -3,12 +3,15 @@ import SwiftUI
 struct MessageInputView: View {
     @Environment(ThemeManager.self) private var themeManager
     @Binding var text: String
-    let isDisabled: Bool
+    let isStreaming: Bool
     @Binding var selectedModel: AIModel
     let models: [AIModel]
     @Binding var showModelPicker: Bool
     let pendingAttachments: [PendingAttachment]
+    let queuedMessagePreviews: [QueuedMessagesPillView.QueuedPreview]
     let onSend: () -> Void
+    let onInterrupt: () -> Void
+    let onRecallLatestQueued: () -> String?
     let onAttachFile: () -> Void
     let onRemoveAttachment: (UUID) -> Void
     var onFilesDropped: (([URL]) -> Void)?
@@ -18,7 +21,7 @@ struct MessageInputView: View {
     var canSend: Bool {
         let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasUploadedAttachments = !pendingAttachments.isEmpty && pendingAttachments.allSatisfy { $0.savedState.isSaved }
-        return (hasText || hasUploadedAttachments) && !isDisabled
+        return hasText || hasUploadedAttachments
     }
 
     private var useGlass: Bool { themeManager.useGlassEffect }
@@ -27,6 +30,12 @@ struct MessageInputView: View {
         let theme = themeManager.colors
 
         VStack(spacing: 0) {
+            if !queuedMessagePreviews.isEmpty {
+                queuedMessagesView
+                    .padding(.horizontal, 14)
+                    .padding(.top, 12)
+            }
+
             // Attachment preview strip
             if !pendingAttachments.isEmpty {
                 AttachmentPreviewStrip(
@@ -59,6 +68,7 @@ struct MessageInputView: View {
                 placeholderColor: NSColor(theme.textTertiary),
                 onSubmit: onSend,
                 canSubmit: canSend,
+                onRecallLatestQueued: onRecallLatestQueued,
                 onFilesDropped: onFilesDropped,
                 onImagePasted: onImagePasted
             )
@@ -110,32 +120,54 @@ struct MessageInputView: View {
     @ViewBuilder
     private var sendButton: some View {
         let theme = themeManager.colors
+        // Streaming + no content → interrupt (pause icon)
+        // Streaming + has content → queue (adds to queue, shown as "text.append" icon)
+        // Not streaming + has content → send (arrow up icon)
+        let showInterrupt = isStreaming && !canSend
+        let showQueue = isStreaming && canSend
+        let iconName = showInterrupt ? "pause.fill" : (showQueue ? "text.append" : "arrow.up")
+        let isButtonEnabled = canSend || isStreaming
+        let fillColor = isButtonEnabled ? theme.accent : theme.surfaceSecondary
+        // Has content → send/queue; no content + streaming → interrupt
+        let buttonAction: () -> Void = canSend ? onSend : onInterrupt
 
         if useGlass {
-            Button(action: onSend) {
-                Image(systemName: "arrow.up")
+            Button(action: buttonAction) {
+                Image(systemName: iconName)
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(canSend ? .white : theme.textTertiary)
+                    .foregroundStyle(isButtonEnabled ? .white : theme.textTertiary)
                     .frame(width: 28, height: 28)
             }
             .buttonStyle(.borderless)
             .glassEffect(
-                .regular.tint(canSend ? theme.accent : theme.surfaceSecondary),
+                .regular.tint(fillColor),
                 in: .circle
             )
-            .disabled(!canSend)
+            .disabled(!isButtonEnabled)
+            .animation(.easeOut(duration: 0.2), value: iconName)
         } else {
-            Button(action: onSend) {
-                Image(systemName: "arrow.up")
+            Button(action: buttonAction) {
+                Image(systemName: iconName)
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(canSend ? .white : theme.textTertiary)
+                    .foregroundStyle(isButtonEnabled ? .white : theme.textTertiary)
                     .frame(width: 28, height: 28)
-                    .background(canSend ? theme.accent : theme.surfaceSecondary)
+                    .background(fillColor)
                     .clipShape(Circle())
             }
             .buttonStyle(.borderless)
-            .disabled(!canSend)
+            .disabled(!isButtonEnabled)
+            .animation(.easeOut(duration: 0.2), value: iconName)
         }
+    }
+
+    private var queuedMessagesView: some View {
+        let theme = themeManager.colors
+        return QueuedMessagesPillView(
+            previews: queuedMessagePreviews,
+            accentColor: theme.accent,
+            secondaryTextColor: theme.textSecondary,
+            tertiaryTextColor: theme.textTertiary
+        )
     }
 
     private var providerWarning: String? {

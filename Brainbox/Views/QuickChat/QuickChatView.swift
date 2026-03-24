@@ -88,7 +88,7 @@ struct QuickChatView: View {
     }
 
     private var canSend: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !cvm.isAssistantStreaming
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     // MARK: - Body
@@ -206,6 +206,12 @@ struct QuickChatView: View {
                     .frame(height: 0.5)
             }
 
+            if !cvm.queuedMessagePreviews.isEmpty {
+                queuedMessagesView
+                    .padding(.horizontal, 18)
+                    .padding(.top, 12)
+            }
+
             TextField("Ask anything", text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 15.5))
@@ -215,6 +221,14 @@ struct QuickChatView: View {
                 .onSubmit { if canSend { send() } }
                 .onKeyPress(keys: [.escape], phases: .down) { _ in
                     onDismiss()
+                    return .handled
+                }
+                .onKeyPress(keys: [.upArrow], phases: .down) { _ in
+                    guard text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                          let recalledText = cvm.popLastQueuedMessage() else {
+                        return .ignored
+                    }
+                    text = recalledText
                     return .handled
                 }
                 .padding(.horizontal, 18)
@@ -232,17 +246,33 @@ struct QuickChatView: View {
 
                 Spacer()
 
-                Button(action: send) {
-                    Image(systemName: "arrow.up")
+                Button {
+                    if canSend {
+                        send()  // sends normally or queues if streaming
+                    } else if cvm.isAssistantStreaming {
+                        cvm.stopStreaming()
+                    }
+                } label: {
+                    // Streaming + no content → interrupt (pause icon)
+                    // Streaming + has content → queue (text.append icon)
+                    // Not streaming + has content → send (arrow up icon)
+                    let showInterrupt = cvm.isAssistantStreaming && !canSend
+                    let showQueue = cvm.isAssistantStreaming && canSend
+                    let isEnabled = canSend || cvm.isAssistantStreaming
+                    let iconName = showInterrupt ? "pause.fill" : (showQueue ? "text.append" : "arrow.up")
+                    Image(systemName: iconName)
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(canSend ? .white : theme.textTertiary.opacity(0.35))
+                        .foregroundStyle(
+                            isEnabled ? .white : theme.textTertiary.opacity(0.35)
+                        )
                         .frame(width: 32, height: 32)
-                        .background(canSend ? theme.accent : .white.opacity(0.08))
+                        .background(isEnabled ? theme.accent : .white.opacity(0.08))
                         .clipShape(Circle())
                 }
                 .buttonStyle(.borderless)
-                .disabled(!canSend)
+                .disabled(!cvm.isAssistantStreaming && !canSend)
                 .animation(.easeOut(duration: 0.2), value: canSend)
+                .animation(.easeOut(duration: 0.2), value: cvm.isAssistantStreaming)
             }
             .padding(.horizontal, 14)
             .padding(.bottom, 10)
@@ -252,6 +282,16 @@ struct QuickChatView: View {
     }
 
     // MARK: - Chat Area
+
+    private var queuedMessagesView: some View {
+        let theme = themeManager.colors
+        return QueuedMessagesPillView(
+            previews: cvm.queuedMessagePreviews,
+            accentColor: theme.accent.opacity(0.9),
+            secondaryTextColor: theme.textSecondary.opacity(0.8),
+            tertiaryTextColor: theme.textTertiary.opacity(0.75)
+        )
+    }
 
     private var chatArea: some View {
         ScrollViewReader { proxy in

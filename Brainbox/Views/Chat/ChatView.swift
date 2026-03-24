@@ -105,12 +105,15 @@ struct ChatView: View {
 
             MessageInputView(
                 text: $inputText,
-                isDisabled: viewModel.isAssistantStreaming,
+                isStreaming: viewModel.isAssistantStreaming,
                 selectedModel: $viewModel.selectedModel,
                 models: viewModel.availableModels,
                 showModelPicker: $showModelPicker,
                 pendingAttachments: pendingAttachments,
+                queuedMessagePreviews: viewModel.queuedMessagePreviews,
                 onSend: { sendMessage() },
+                onInterrupt: { viewModel.stopStreaming() },
+                onRecallLatestQueued: { viewModel.popLastQueuedMessage() },
                 onAttachFile: { showFilePicker = true },
                 onRemoveAttachment: { id in removeAttachment(id: id) },
                 onFilesDropped: { urls in handleDroppedFiles(urls) },
