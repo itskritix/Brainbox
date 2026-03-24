@@ -12,6 +12,7 @@ struct ChatView: View {
     @State private var shouldAutoScroll = true
     @State private var showFilePicker = false
     @State private var pendingAttachments: [PendingAttachment] = []
+    @State private var isErrorHovered = false
     private let attachmentService = AttachmentService()
     private let localAttachmentService = LocalAttachmentService()
 
@@ -101,6 +102,15 @@ struct ChatView: View {
                 .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusSmall))
                 .padding(.horizontal, 20)
                 .padding(.bottom, 4)
+                .onHover { isErrorHovered = $0 }
+                .task(id: "\(error)-\(isErrorHovered)") {
+                    // Only count down when not hovered
+                    guard !isErrorHovered else { return }
+                    try? await Task.sleep(for: .seconds(5))
+                    if viewModel.errorMessage == error {
+                        viewModel.errorMessage = nil
+                    }
+                }
             }
 
             MessageInputView(

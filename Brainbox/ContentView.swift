@@ -314,6 +314,12 @@ struct ContentView: View {
                 .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusSmall))
                 .frame(maxWidth: 680)
                 .padding(.bottom, 4)
+                .task(id: error) {
+                    try? await Task.sleep(for: .seconds(30))
+                    if chatVMUnwrapped.errorMessage == error {
+                        chatVMUnwrapped.errorMessage = nil
+                    }
+                }
             }
 
             MessageInputView(

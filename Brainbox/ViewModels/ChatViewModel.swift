@@ -28,7 +28,11 @@ class ChatViewModel {
 
     var messages: [Message] = []
     var isLoading = false
-    var errorMessage: String?
+    var errorMessage: String? {
+        didSet {
+            scheduleErrorDismissal(for: errorMessage)
+        }
+    }
     var availableModels: [AIModel] = defaultModels
     var queuedMessages: [QueuedMessage] = []
     var selectedModel: AIModel = defaultModels[0] {
@@ -42,14 +46,21 @@ class ChatViewModel {
     private(set) var activeConversationId: String?
     private var streamingTask: Task<Void, Never>?
     private var activeStream: ActiveStream?
+    private var errorDismissTask: Task<Void, Never>?
     private let dataService: DataServiceProtocol
     private let streamingService = StreamingService()
     private let keychainService: KeychainService
     private let localAttachmentService = LocalAttachmentService()
+    private let errorDismissalInterval: Duration
 
-    init(dataService: DataServiceProtocol, keychainService: KeychainService) {
+    init(
+        dataService: DataServiceProtocol,
+        keychainService: KeychainService,
+        errorDismissalInterval: Duration = .seconds(15)
+    ) {
         self.dataService = dataService
         self.keychainService = keychainService
+        self.errorDismissalInterval = errorDismissalInterval
     }
 
     /// Whether the assistant is currently streaming a response.
@@ -359,6 +370,27 @@ class ChatViewModel {
                 sendNow(next)
                 return
             }
+        }
+    }
+
+    private func scheduleErrorDismissal(for message: String?) {
+        errorDismissTask?.cancel()
+        errorDismissTask = nil
+
+        guard let message else { return }
+
+        errorDismissTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: errorDismissalInterval)
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled, self?.errorMessage == message else {
+                return
+            }
+
+            self?.errorMessage = nil
         }
     }
 }
