@@ -21,7 +21,7 @@ protocol DataServiceProtocol {
         modelIdentifier: String?,
         providerName: String?,
         isStreaming: Bool,
-        attachmentIds: [String]
+        attachments: [AttachmentInfo]
     ) -> Message
     func updateMessageContent(id: String, content: String)
     func finishStreaming(id: String, content: String)

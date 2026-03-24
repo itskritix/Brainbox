@@ -16,7 +16,7 @@ struct PendingAttachment: Identifiable {
 
     enum SavedState: Equatable {
         case pending
-        case saved(attachmentId: String)
+        case saved(attachmentId: String, localPath: String)
         case failed(error: String)
 
         var isSaved: Bool {
@@ -29,4 +29,16 @@ struct PendingAttachment: Identifiable {
 enum AttachmentFileType: String {
     case image
     case pdf
+}
+
+/// Lightweight metadata passed through the send chain so SwiftData can create SDAttachment records.
+struct AttachmentInfo: Equatable {
+    let attachmentId: String
+    let fileName: String
+    let fileType: String
+    let mimeType: String
+    let fileSize: Int
+    let width: Int?
+    let height: Int?
+    let localPath: String
 }

@@ -7,7 +7,7 @@ class ChatViewModel {
         let id = UUID()
         let content: String
         let conversationId: String
-        let attachmentIds: [String]
+        let attachments: [AttachmentInfo]
         let model: AIModel
 
         var previewText: String {
@@ -15,7 +15,7 @@ class ChatViewModel {
             if !trimmed.isEmpty {
                 return trimmed
             }
-            let count = attachmentIds.count
+            let count = attachments.count
             return count == 1 ? "1 attachment" : "\(count) attachments"
         }
     }
@@ -103,9 +103,9 @@ class ChatViewModel {
         }
     }
 
-    func send(content: String, conversationId: String, attachmentIds: [String] = []) {
+    func send(content: String, conversationId: String, attachments: [AttachmentInfo] = []) {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty || !attachmentIds.isEmpty else {
+        guard !trimmed.isEmpty || !attachments.isEmpty else {
             return
         }
 
@@ -117,7 +117,7 @@ class ChatViewModel {
         let queuedMessage = QueuedMessage(
             content: trimmed,
             conversationId: conversationId,
-            attachmentIds: attachmentIds,
+            attachments: attachments,
             model: selectedModel
         )
 
@@ -194,7 +194,7 @@ class ChatViewModel {
             modelIdentifier: nil,
             providerName: nil,
             isStreaming: false,
-            attachmentIds: queuedMessage.attachmentIds
+            attachments: queuedMessage.attachments
         )
         messages.append(userMsg)
 
@@ -212,7 +212,7 @@ class ChatViewModel {
             modelIdentifier: queuedMessage.model.id,
             providerName: queuedMessage.model.provider,
             isStreaming: true,
-            attachmentIds: []
+            attachments: []
         )
         messages.append(assistantMsg)
 

@@ -82,7 +82,7 @@ final class SwiftDataService: DataServiceProtocol {
         modelIdentifier: String?,
         providerName: String?,
         isStreaming: Bool,
-        attachmentIds: [String]
+        attachments: [AttachmentInfo]
     ) -> Message {
         let conversation = fetchSDConversation(id: conversationId)
 
@@ -96,12 +96,22 @@ final class SwiftDataService: DataServiceProtocol {
         )
         context.insert(sd)
 
-        // Link attachments
-        for attachmentId in attachmentIds {
-            if let att = fetchSDAttachment(id: attachmentId) {
-                att.message = sd
-                sd.attachments.append(att)
-            }
+        // Create and link attachment records
+        for info in attachments {
+            let sdAttachment = SDAttachment(
+                id: UUID(uuidString: info.attachmentId) ?? UUID(),
+                conversation: conversation,
+                message: sd,
+                fileName: info.fileName,
+                fileType: info.fileType,
+                mimeType: info.mimeType,
+                fileSize: info.fileSize,
+                width: info.width,
+                height: info.height,
+                localPath: info.localPath
+            )
+            context.insert(sdAttachment)
+            sd.attachments.append(sdAttachment)
         }
 
         // Update conversation timestamp
@@ -350,8 +360,8 @@ enum SharedModelContainer {
             "Brainbox",
             schema: schema,
             isStoredInMemoryOnly: false
-        )
-        do {
+         )
+         do {
             return try ModelContainer(for: schema, configurations: [configuration])
         } catch {
             // Schema migration failed — delete the old store and retry with a fresh database.

@@ -426,11 +426,11 @@ struct ContentView: View {
         chatVMUnwrapped.regenerate(messageId: messageId, conversationId: conversationId)
     }
 
-    private func sendFromEmptyState(_ content: String, attachmentIds: [String] = []) {
+    private func sendFromEmptyState(_ content: String, attachments: [AttachmentInfo] = []) {
         if let id = conversationListVMUnwrapped.createConversation() {
             chatVMUnwrapped.loadConversation(id)
             selectedConversationId = id
-            chatVMUnwrapped.send(content: content, conversationId: id, attachmentIds: attachmentIds)
+            chatVMUnwrapped.send(content: content, conversationId: id, attachments: attachments)
         } else {
             userDidSend = false
             suggestionsVisible = true
@@ -439,21 +439,30 @@ struct ContentView: View {
 
     private func sendMessage() {
         let content = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let attachmentIds = pendingAttachments.compactMap { att -> String? in
-            if case .saved(let id) = att.savedState { return id }
-            return nil
+        let attachmentInfos: [AttachmentInfo] = pendingAttachments.compactMap { att in
+            guard case .saved(let savedId, let localPath) = att.savedState else { return nil }
+            return AttachmentInfo(
+                attachmentId: savedId,
+                fileName: att.fileName,
+                fileType: att.fileType.rawValue,
+                mimeType: att.mimeType,
+                fileSize: att.fileSize,
+                width: att.width,
+                height: att.height,
+                localPath: localPath
+            )
         }
-        guard !content.isEmpty || !attachmentIds.isEmpty else { return }
+        guard !content.isEmpty || !attachmentInfos.isEmpty else { return }
         inputText = ""
-        let currentAttachmentIds = attachmentIds
+        let currentAttachments = attachmentInfos
         pendingAttachments = []
         userDidSend = true
 
         if let conversationId = selectedConversationId {
-            chatVMUnwrapped.send(content: content, conversationId: conversationId, attachmentIds: currentAttachmentIds)
+            chatVMUnwrapped.send(content: content, conversationId: conversationId, attachments: currentAttachments)
             conversationListVMUnwrapped.refresh()
         } else {
-            sendFromEmptyState(content, attachmentIds: currentAttachmentIds)
+            sendFromEmptyState(content, attachments: currentAttachments)
         }
     }
 
@@ -506,19 +515,7 @@ struct ContentView: View {
                 conversationId: conversationId
             )
 
-            let _ = dataService.createAttachment(
-                conversationId: conversationId,
-                messageId: nil,
-                fileName: attachment.fileName,
-                fileType: attachment.fileType.rawValue,
-                mimeType: attachment.mimeType,
-                fileSize: attachment.fileSize,
-                width: attachment.width,
-                height: attachment.height,
-                localPath: result.localPath
-            )
-
-            attachment.savedState = .saved(attachmentId: result.attachmentId)
+            attachment.savedState = .saved(attachmentId: result.attachmentId, localPath: result.localPath)
         } catch {
             attachment.savedState = .failed(error: error.localizedDescription)
         }

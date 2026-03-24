@@ -198,14 +198,23 @@ struct ChatView: View {
 
     private func sendMessage() {
         let content = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let attachmentIds = pendingAttachments.compactMap { att -> String? in
-            if case .saved(let id) = att.savedState { return id }
-            return nil
+        let attachmentInfos: [AttachmentInfo] = pendingAttachments.compactMap { att in
+            guard case .saved(let savedId, let localPath) = att.savedState else { return nil }
+            return AttachmentInfo(
+                attachmentId: savedId,
+                fileName: att.fileName,
+                fileType: att.fileType.rawValue,
+                mimeType: att.mimeType,
+                fileSize: att.fileSize,
+                width: att.width,
+                height: att.height,
+                localPath: localPath
+            )
         }
-        guard !content.isEmpty || !attachmentIds.isEmpty else { return }
+        guard !content.isEmpty || !attachmentInfos.isEmpty else { return }
         inputText = ""
         pendingAttachments = []
-        viewModel.send(content: content, conversationId: conversationId, attachmentIds: attachmentIds)
+        viewModel.send(content: content, conversationId: conversationId, attachments: attachmentInfos)
     }
 
     private func handleDroppedFiles(_ urls: [URL]) {
@@ -250,7 +259,7 @@ struct ChatView: View {
                 conversationId: conversationId
             )
             if let idx = pendingAttachments.firstIndex(where: { $0.id == attachment.id }) {
-                pendingAttachments[idx].savedState = .saved(attachmentId: result.attachmentId)
+                pendingAttachments[idx].savedState = .saved(attachmentId: result.attachmentId, localPath: result.localPath)
             }
         } catch {
             if let idx = pendingAttachments.firstIndex(where: { $0.id == attachment.id }) {
