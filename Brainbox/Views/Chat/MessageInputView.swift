@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct MessageInputView: View {
     @Environment(ThemeManager.self) private var themeManager
@@ -17,6 +18,14 @@ struct MessageInputView: View {
     var onFilesDropped: (([URL]) -> Void)?
     var onImagePasted: ((Data) -> Void)?
     @State private var editorHeight: CGFloat = 22
+    @State private var isDragOver = false
+
+    private static let supportedDropTypes: [UTType] = [
+        .fileURL, .image, .jpeg, .png, .gif, .webP, .pdf
+    ]
+    private static let supportedFileExtensions: Set<String> = [
+        "jpg", "jpeg", "png", "gif", "webp", "pdf"
+    ]
 
     var canSend: Bool {
         let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -115,6 +124,23 @@ struct MessageInputView: View {
                         .stroke(theme.border, lineWidth: 1)
                 )
         }
+        .overlay(
+            RoundedRectangle(cornerRadius: AppTheme.radiusLarge)
+                .stroke(theme.accent, lineWidth: 2)
+                .opacity(isDragOver ? 1 : 0)
+                .animation(.easeInOut(duration: 0.15), value: isDragOver)
+        )
+        .overlay {
+            if isDragOver {
+                RoundedRectangle(cornerRadius: AppTheme.radiusLarge)
+                    .fill(theme.accent.opacity(0.06))
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
+        .onDrop(of: Self.supportedDropTypes, isTargeted: $isDragOver) { providers in
+            handleDrop(providers: providers)
+        }
     }
 
     @ViewBuilder
@@ -168,6 +194,38 @@ struct MessageInputView: View {
             secondaryTextColor: theme.textSecondary,
             tertiaryTextColor: theme.textTertiary
         )
+    }
+
+    private func handleDrop(providers: [NSItemProvider]) -> Bool {
+        var handled = false
+
+        for provider in providers {
+            // Handle file URLs (images and PDFs)
+            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                    guard let data = item as? Data,
+                          let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+                    let ext = url.pathExtension.lowercased()
+                    guard Self.supportedFileExtensions.contains(ext) else { return }
+                    DispatchQueue.main.async {
+                        self.onFilesDropped?([url])
+                    }
+                }
+                handled = true
+            }
+            // Handle raw image data (e.g. dragged from browser/preview)
+            else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+                provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
+                    guard let data = data else { return }
+                    DispatchQueue.main.async {
+                        self.onImagePasted?(data)
+                    }
+                }
+                handled = true
+            }
+        }
+
+        return handled
     }
 
     private var providerWarning: String? {
