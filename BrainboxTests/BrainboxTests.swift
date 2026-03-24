@@ -187,7 +187,7 @@ final class BrainboxTests: XCTestCase {
     // MARK: - PendingAttachment SavedState Tests
 
     func testSavedStateIsSaved() throws {
-        let saved = PendingAttachment.SavedState.saved(attachmentId: "abc")
+        let saved = PendingAttachment.SavedState.saved(attachmentId: "abc", localPath: "/tmp/test.png")
         XCTAssertTrue(saved.isSaved)
 
         let pending = PendingAttachment.SavedState.pending
@@ -225,4 +225,110 @@ final class BrainboxTests: XCTestCase {
         XCTAssertTrue(apiErr.localizedDescription.contains("429"))
         XCTAssertTrue(apiErr.localizedDescription.contains("Rate limited"))
     }
+
+    @MainActor
+    func testChatViewModelAutoDismissesErrorMessage() async throws {
+        let viewModel = ChatViewModel(
+            dataService: TestDataService(),
+            keychainService: TestKeychainService(),
+            errorDismissalInterval: .milliseconds(50)
+        )
+
+        viewModel.errorMessage = "Temporary error"
+        XCTAssertEqual(viewModel.errorMessage, "Temporary error")
+
+        try await Task.sleep(for: .milliseconds(120))
+
+        XCTAssertNil(viewModel.errorMessage)
+    }
+}
+
+@MainActor
+private final class TestDataService: DataServiceProtocol {
+    func fetchConversations(profileId: String?) -> [Conversation] { [] }
+    func fetchArchivedConversations(profileId: String?) -> [Conversation] { [] }
+    func createConversation(title: String?, profileId: String?) -> Conversation {
+        let now = Date().timeIntervalSince1970 * 1000
+        return Conversation(_id: UUID().uuidString, profileId: profileId, title: title ?? "Test", createdAt: now, updatedAt: now)
+    }
+    func deleteConversation(id: String) {}
+    func renameConversation(id: String, title: String) {}
+    func archiveConversation(id: String) {}
+    func unarchiveConversation(id: String) {}
+    func updateConversationModel(id: String, modelId: String, provider: String) {}
+    func fetchMessages(conversationId: String) -> [Message] { [] }
+    func createMessage(
+        conversationId: String,
+        role: String,
+        content: String,
+        modelIdentifier: String?,
+        providerName: String?,
+        isStreaming: Bool,
+        attachments: [AttachmentInfo]
+    ) -> Message {
+        Message(
+            _id: UUID().uuidString,
+            conversationId: conversationId,
+            role: role,
+            content: content,
+            modelIdentifier: modelIdentifier,
+            providerName: providerName,
+            isStreaming: isStreaming,
+            attachments: attachments.map {
+                MessageAttachment(
+                    _id: $0.attachmentId,
+                    fileName: $0.fileName,
+                    fileType: $0.fileType,
+                    mimeType: $0.mimeType,
+                    fileSize: Double($0.fileSize),
+                    width: $0.width.map(Double.init),
+                    height: $0.height.map(Double.init),
+                    url: $0.localPath
+                )
+            },
+            createdAt: Date().timeIntervalSince1970 * 1000
+        )
+    }
+    func updateMessageContent(id: String, content: String) {}
+    func finishStreaming(id: String, content: String) {}
+    func deleteMessage(id: String) {}
+    func fetchProfiles() -> [Profile] { [] }
+    func createProfile(name: String, emoji: String) -> Profile {
+        let now = Date().timeIntervalSince1970 * 1000
+        return Profile(_id: UUID().uuidString, name: name, emoji: emoji, createdAt: now, updatedAt: now)
+    }
+    func deleteProfile(id: String) {}
+    func renameProfile(id: String, name: String) {}
+    func createAttachment(
+        conversationId: String,
+        messageId: String?,
+        fileName: String,
+        fileType: String,
+        mimeType: String,
+        fileSize: Int,
+        width: Int?,
+        height: Int?,
+        localPath: String
+    ) -> MessageAttachment {
+        MessageAttachment(
+            _id: UUID().uuidString,
+            fileName: fileName,
+            fileType: fileType,
+            mimeType: mimeType,
+            fileSize: Double(fileSize),
+            width: width.map(Double.init),
+            height: height.map(Double.init),
+            url: localPath
+        )
+    }
+    func fetchAttachments(messageId: String) -> [MessageAttachment] { [] }
+    func deleteAttachments(conversationId: String) {}
+    func branchConversation(fromMessageId: String, conversationId: String) -> String? { nil }
+    func autoTitleConversation(id: String, firstMessageContent: String) {}
+}
+
+@MainActor
+private final class TestKeychainService: KeychainService {
+    override func apiKey(for provider: String) -> String? { nil }
+    override var configuredProviders: [String] { [] }
 }
