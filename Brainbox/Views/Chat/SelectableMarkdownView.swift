@@ -20,47 +20,58 @@ struct MarkdownContentView: View {
                     SelectableMarkdownView(markdown: md, theme: theme)
                 case .code(let lang, let code):
                     CodeBlockView(language: lang, content: code, theme: theme)
+                case .divider:
+                    Rectangle()
+                        .fill(theme.border.opacity(0.4))
+                        .frame(height: 1)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
                 }
             }
         }
     }
 
-    // MARK: Segment parser
+    // MARK: Segment parser (AST-based)
 
     private enum Segment {
         case text(String)
         case code(language: String?, content: String)
+        case divider
     }
 
+    /// Parses markdown into segments using the swift-markdown AST.
+    /// Code blocks and thematic breaks are extracted as dedicated segments;
+    /// all other blocks are grouped into text segments for NSTextView rendering.
     private static func parse(_ markdown: String) -> [Segment] {
-        let pattern = #"```([^\n]*)\n([\s\S]*?)```"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else {
-            return [.text(markdown)]
-        }
-        let ns = markdown as NSString
-        let matches = regex.matches(in: markdown, range: NSRange(location: 0, length: ns.length))
-        guard !matches.isEmpty else { return [.text(markdown)] }
-
+        let document = Document(parsing: markdown)
         var segments: [Segment] = []
-        var cursor = 0
+        var textBlocks: [String] = []
 
-        for match in matches {
-            let range = match.range
-            if range.location > cursor {
-                let text = ns.substring(with: NSRange(location: cursor, length: range.location - cursor))
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                if !text.isEmpty { segments.append(.text(text)) }
+        func flushText() {
+            let combined = textBlocks.joined(separator: "\n\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !combined.isEmpty {
+                segments.append(.text(combined))
             }
-            let lang = ns.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespaces)
-            var code = ns.substring(with: match.range(at: 2))
-            if code.hasSuffix("\n") { code = String(code.dropLast()) }
-            segments.append(.code(language: lang.isEmpty ? nil : lang, content: code))
-            cursor = range.location + range.length
+            textBlocks = []
         }
-        if cursor < ns.length {
-            let text = ns.substring(from: cursor).trimmingCharacters(in: .whitespacesAndNewlines)
-            if !text.isEmpty { segments.append(.text(text)) }
+
+        for child in document.children {
+            if let codeBlock = child as? CodeBlock {
+                flushText()
+                var code = codeBlock.code
+                if code.hasSuffix("\n") { code = String(code.dropLast()) }
+                let lang = codeBlock.language.flatMap { $0.isEmpty ? nil : $0 }
+                segments.append(.code(language: lang, content: code))
+            } else if child is ThematicBreak {
+                flushText()
+                segments.append(.divider)
+            } else {
+                textBlocks.append(child.format())
+            }
         }
+        flushText()
+
         return segments
     }
 }
@@ -349,19 +360,11 @@ struct ThemedMarkdownRenderer: MarkupVisitor {
     }
 
     mutating func visitThematicBreak(_ thematicBreak: ThematicBreak) -> NSAttributedString {
-        let style = NSMutableParagraphStyle()
-        style.paragraphSpacingBefore = 12
-        style.paragraphSpacing = 12
-        // Use a long run of spaces with strikethrough to create a full-width line
-        let divider = NSMutableAttributedString(
-            string: String(repeating: " ", count: 200) + "\n",
-            attributes: [
-                .font: NSFont.systemFont(ofSize: 1),
-                .strikethroughStyle: NSUnderlineStyle.single.rawValue,
-                .strikethroughColor: NSColor(theme.border).withAlphaComponent(0.3),
-                .paragraphStyle: style,
-            ])
-        return divider
+        // Thematic breaks are extracted as .divider segments and rendered as SwiftUI views.
+        // This is a fallback that shouldn't normally be reached.
+        return NSAttributedString(string: "\n", attributes: [
+            .font: NSFont.systemFont(ofSize: baseFontSize),
+        ])
     }
 
     // MARK: Lists
