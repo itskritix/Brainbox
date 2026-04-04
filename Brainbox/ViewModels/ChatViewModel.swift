@@ -182,7 +182,8 @@ class ChatViewModel {
 
     /// Edits a user message in place: truncates everything after it, updates content, and re-sends.
     func editAndResend(messageId: String, newContent: String, conversationId: String) {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
+        guard let index = messages.firstIndex(where: { $0.id == messageId }),
+              messages[index].isUser else { return }
         cancelStreaming(finalizeCurrentMessage: false, continueQueue: false)
 
         // Delete all messages after the edited one

@@ -265,6 +265,21 @@ final class SwiftDataService: DataServiceProtocol {
                 createdAt: Date(timeIntervalSince1970: msg.createdAt / 1000)
             )
             context.insert(newMsg)
+
+            for att in msg.attachments ?? [] {
+                let newAtt = SDAttachment(
+                    conversation: newConv,
+                    message: newMsg,
+                    fileName: att.fileName,
+                    fileType: att.fileType,
+                    mimeType: att.mimeType,
+                    fileSize: Int(att.fileSize ?? 0),
+                    width: att.width.map { Int($0) },
+                    height: att.height.map { Int($0) },
+                    localPath: att.url ?? ""
+                )
+                context.insert(newAtt)
+            }
         }
 
         try? context.save()
