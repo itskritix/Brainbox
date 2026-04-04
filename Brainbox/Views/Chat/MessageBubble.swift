@@ -295,10 +295,6 @@ struct MessageBubble: View, Equatable {
 
 }
 
-// MARK: - EditTextView (NSTextView wrapper with keyboard shortcuts)
-
-/// A text editor that supports Escape to cancel and Enter to submit.
-/// Shift+Enter inserts a newline.
 struct EditTextView: NSViewRepresentable {
     @Binding var text: String
     var onEscape: () -> Void
@@ -309,7 +305,6 @@ struct EditTextView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
         let textView = EditNSTextView()
         textView.delegate = context.coordinator
         textView.editDelegate = context.coordinator
@@ -319,22 +314,29 @@ struct EditTextView: NSViewRepresentable {
         textView.textColor = .labelColor
         textView.backgroundColor = .clear
         textView.drawsBackground = false
+        textView.isEditable = true
+        textView.isSelectable = true
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.textContainerInset = NSSize(width: 0, height: 2)
         textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.lineFragmentPadding = 0
         textView.string = text
 
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.isAutomaticSpellingCorrectionEnabled = false
+
+        let scrollView = NSScrollView()
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = false
         scrollView.hasHorizontalScroller = false
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
 
-        // Focus the text view on appear
         DispatchQueue.main.async {
             textView.window?.makeFirstResponder(textView)
-            // Place cursor at end
             textView.setSelectedRange(NSRange(location: textView.string.count, length: 0))
         }
 
@@ -342,6 +344,8 @@ struct EditTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        context.coordinator.parent = self
+
         guard let textView = scrollView.documentView as? NSTextView else { return }
         if textView.string != text {
             textView.string = text
@@ -360,36 +364,40 @@ struct EditTextView: NSViewRepresentable {
             parent.text = textView.string
         }
 
-        func handleEscape() {
-            parent.onEscape()
-        }
-
-        func handleSubmit() {
-            parent.onSubmit()
-        }
+        func handleEscape() { parent.onEscape() }
+        func handleSubmit() { parent.onSubmit() }
     }
 }
 
-/// NSTextView subclass that intercepts Enter and Escape keys.
 class EditNSTextView: NSTextView {
     weak var editDelegate: EditTextView.Coordinator?
 
-    override func keyDown(with event: NSEvent) {
-        let enterKeyCode: UInt16 = 36
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
-        if event.keyCode == 53 { // Escape
+        if flags == .command && event.keyCode == 51 {
+            deleteToBeginningOfLine(nil)
+            return true
+        }
+
+        if flags == .command, event.charactersIgnoringModifiers == "a" {
+            selectAll(nil)
+            return true
+        }
+
+        return super.performKeyEquivalent(with: event)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+        if event.keyCode == 53 {
             editDelegate?.handleEscape()
             return
         }
 
-        if event.keyCode == enterKeyCode {
-            if event.modifierFlags.contains(.shift) {
-                // Shift+Enter → newline
-                super.keyDown(with: event)
-            } else {
-                // Enter → submit
-                editDelegate?.handleSubmit()
-            }
+        if event.keyCode == 36 && flags.isEmpty {
+            editDelegate?.handleSubmit()
             return
         }
 
