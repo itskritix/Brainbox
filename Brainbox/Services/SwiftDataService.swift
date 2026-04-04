@@ -67,10 +67,11 @@ final class SwiftDataService: DataServiceProtocol {
 
     func fetchMessages(conversationId: String) -> [Message] {
         guard let uuid = UUID(uuidString: conversationId) else { return [] }
-        let descriptor = FetchDescriptor<SDMessage>(
+        var descriptor = FetchDescriptor<SDMessage>(
             predicate: #Predicate { $0.conversation?.id == uuid },
             sortBy: [SortDescriptor(\.createdAt)]
         )
+        descriptor.relationshipKeyPathsForPrefetching = [\.attachments]
         let results = (try? context.fetch(descriptor)) ?? []
         return results.map { Message(from: $0) }
     }

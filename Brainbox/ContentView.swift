@@ -281,7 +281,8 @@ struct ContentView: View {
                         }
                         .animation(.easeInOut(duration: 0.15), value: isAtBottom)
                     }
-                    .transition(.blurReplace)
+                    .id(cvm.activeConversationId)
+                    .transition(.blurReplace(.downUp))
                 } else {
                     let displayName = UserDefaults.standard.string(forKey: UDKey.userName)
                     EmptyStateView(
@@ -296,7 +297,7 @@ struct ContentView: View {
                     .transition(.blurReplace)
                 }
             }
-            .animation(.easeInOut(duration: 0.3), value: selectedConversationId)
+            .animation(.easeOut(duration: 0.25), value: selectedConversationId == nil)
 
             if let error = cvm.errorMessage {
                 HStack(spacing: 8) {

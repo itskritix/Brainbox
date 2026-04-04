@@ -3,6 +3,8 @@ import SwiftData
 
 @Model
 final class SDConversation {
+    #Index<SDConversation>([\.updatedAt], [\.profileId])
+
     @Attribute(.unique) var id: UUID
     var profileId: UUID?
     var title: String

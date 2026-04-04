@@ -3,6 +3,8 @@ import SwiftData
 
 @Model
 final class SDMessage {
+    #Index<SDMessage>([\.createdAt])
+
     @Attribute(.unique) var id: UUID
     var conversation: SDConversation?
     var role: String
