@@ -25,6 +25,7 @@ struct MessageActionBar: View {
                 Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
                     .contentTransition(.symbolEffect(.replace))
                     .foregroundStyle(showCopied ? theme.accent : theme.textTertiary)
+                    .frame(width: 14, height: 14)
             }
             .buttonStyle(.borderless)
             .help("Copy response")
@@ -53,6 +54,48 @@ struct MessageActionBar: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(theme.textTertiary)
             }
+        }
+        .font(.system(size: 12))
+    }
+}
+
+struct UserMessageActionBar: View {
+    @Environment(ThemeManager.self) private var themeManager
+    let onCopy: () -> Void
+    let onEdit: (() -> Void)?
+
+    @State private var showCopied = false
+
+    var body: some View {
+        let theme = themeManager.colors
+
+        HStack(spacing: 14) {
+            // Edit
+            if let onEdit {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                        .foregroundStyle(theme.textTertiary)
+                }
+                .buttonStyle(.borderless)
+                .help("Edit message")
+            }
+
+            // Copy
+            Button {
+                onCopy()
+                showCopied = true
+                Task {
+                    try? await Task.sleep(for: .seconds(1.5))
+                    showCopied = false
+                }
+            } label: {
+                Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                    .contentTransition(.symbolEffect(.replace))
+                    .foregroundStyle(showCopied ? theme.accent : theme.textTertiary)
+                    .frame(width: 14, height: 14)
+            }
+            .buttonStyle(.borderless)
+            .help("Copy message")
         }
         .font(.system(size: 12))
     }

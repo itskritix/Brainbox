@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		24C001012F5A000000E76BA8 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 24C001002F5A000000E76BA8 /* MarkdownUI */; };
+		24E001032F5C000000E76BA8 /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = 24E001022F5C000000E76BA8 /* Markdown */; };
 		24D001022F5B000000E76BA8 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 24D001012F5B000000E76BA8 /* KeyboardShortcuts */; };
 /* End PBXBuildFile section */
 
@@ -59,6 +60,7 @@
 			files = (
 				24C001012F5A000000E76BA8 /* MarkdownUI in Frameworks */,
 				24D001022F5B000000E76BA8 /* KeyboardShortcuts in Frameworks */,
+				24E001032F5C000000E76BA8 /* Markdown in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -129,6 +131,7 @@
 			packageProductDependencies = (
 				24C001002F5A000000E76BA8 /* MarkdownUI */,
 				24D001012F5B000000E76BA8 /* KeyboardShortcuts */,
+				24E001022F5C000000E76BA8 /* Markdown */,
 			);
 			productName = Brainbox;
 			productReference = 24B855CB2F598C9600E76BA8 /* Brainbox.app */;
@@ -215,6 +218,7 @@
 			packageReferences = (
 				24C000FE2F5A000000E76BA8 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				24D001002F5B000000E76BA8 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
+				24E001012F5C000000E76BA8 /* XCRemoteSwiftPackageReference "swift-markdown" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 24B855CC2F598C9600E76BA8 /* Products */;
@@ -632,6 +636,14 @@
 				minimumVersion = 2.0.0;
 			};
 		};
+	24E001012F5C000000E76BA8 /* XCRemoteSwiftPackageReference "swift-markdown" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/swiftlang/swift-markdown";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.5.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -644,6 +656,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 24D001002F5B000000E76BA8 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
 			productName = KeyboardShortcuts;
+		};
+	24E001022F5C000000E76BA8 /* Markdown */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 24E001012F5C000000E76BA8 /* XCRemoteSwiftPackageReference "swift-markdown" */;
+			productName = Markdown;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

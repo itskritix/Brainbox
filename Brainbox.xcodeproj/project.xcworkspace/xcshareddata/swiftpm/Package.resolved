@@ -1,5 +1,5 @@
 {
-  "originHash" : "607bf781f4c6295d125060d91b6f77a40fcf9ba509b13727e20931adc06298ab",
+  "originHash" : "f29d43060ee5489c5c1bd29e7dde5e390f5835c4cddba3752ffd0e644581291f",
   "pins" : [
     {
       "identity" : "keyboardshortcuts",
@@ -26,6 +26,15 @@
       "state" : {
         "revision" : "5d9bdaa4228b381639fff09403e39a04926e2dbe",
         "version" : "0.7.1"
+      }
+    },
+    {
+      "identity" : "swift-markdown",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-markdown",
+      "state" : {
+        "revision" : "7d9a5ce307528578dfa777d505496bd5f544ad94",
+        "version" : "0.7.3"
       }
     },
     {

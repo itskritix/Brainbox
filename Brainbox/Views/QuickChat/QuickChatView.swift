@@ -321,7 +321,7 @@ struct QuickChatView: View {
                     }
                     .padding(.vertical, 12)
                 } else {
-                    SelectableMarkdownView(markdown: msg.content, theme: theme)
+                    MarkdownContentView(markdown: msg.content, theme: theme)
 
                     if !msg.isStreaming {
                         HStack(spacing: 2) {

@@ -229,7 +229,15 @@ struct ContentView: View {
                                         isLastAssistantMessage: isLastAssistant,
                                         onCopy: { copyToClipboard(message.content) },
                                         onBranch: { branchFrom(messageId: message.id) },
-                                        onRegenerate: { regenerateMessage(message.id) }
+                                        onRegenerate: { regenerateMessage(message.id) },
+                                        onEditSubmit: message.isUser ? { newContent in
+                                            guard let convId = selectedConversationId else { return }
+                                            cvm.editAndResend(
+                                                messageId: message.id,
+                                                newContent: newContent,
+                                                conversationId: convId
+                                            )
+                                        } : nil
                                     )
                                     .id(message.id)
                                 }

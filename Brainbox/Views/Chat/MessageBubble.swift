@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 // Message bubbles are CONTENT, not navigation — never apply glass here.
 // Per Apple's Liquid Glass guidelines: glass is for navigation layer only.
@@ -14,8 +15,12 @@ struct MessageBubble: View, Equatable {
     let onCopy: () -> Void
     let onBranch: () -> Void
     let onRegenerate: (() -> Void)?
+    let onEditSubmit: ((String) -> Void)?
 
     @State private var isHovered = false
+    @State private var isUserHovered = false
+    @State private var isEditing = false
+    @State private var editText = ""
     @State private var isReasoningExpanded = false
     @State private var hasAutoCollapsed = false
 
@@ -81,39 +86,128 @@ struct MessageBubble: View, Equatable {
         }
     }
 
+    private func cancelEdit() {
+        withAnimation(.spring(duration: 0.35, bounce: 0.12)) {
+            isEditing = false
+        }
+    }
+
+    private func submitEdit() {
+        let trimmed = editText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        withAnimation(.spring(duration: 0.35, bounce: 0.12)) {
+            isEditing = false
+        }
+        onEditSubmit?(trimmed)
+    }
+
     private var userBubble: some View {
         let theme = themeManager.colors
         let hasAttachments = message.attachments != nil && !message.attachments!.isEmpty
         let hasText = !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
-        return VStack(alignment: .trailing, spacing: 8) {
-            // Attachments — displayed OUTSIDE the text bubble, right-aligned
+        return VStack(alignment: .trailing, spacing: 6) {
+            // Attachments
             if hasAttachments {
                 AttachmentGrid(attachments: message.attachments!)
             }
 
-            // Text content in its own bubble
-            if hasText {
-                Text(message.content)
-                    .font(.system(size: 14))
-                    .foregroundStyle(theme.textPrimary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(
-                        ZStack {
-                            theme.backgroundTertiary
-                            theme.accent.opacity(0.3)
+            if hasText || isEditing {
+                // Single container that morphs between display and edit
+                VStack(alignment: .leading, spacing: 0) {
+                    if isEditing {
+                        EditTextView(text: $editText, onEscape: cancelEdit, onSubmit: submitEdit)
+                            .font(.system(size: 14))
+                            .frame(minHeight: 36, maxHeight: 200)
+                            .padding(.horizontal, 14)
+                            .padding(.top, 12)
+                            .padding(.bottom, 8)
+
+                        Divider()
+                            .background(theme.border.opacity(0.3))
+
+                        HStack {
+                            Spacer()
+
+                            Button(action: cancelEdit) {
+                                Text("Cancel")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(theme.textSecondary)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 7)
+                                    .background(theme.surfacePrimary)
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule().stroke(theme.border.opacity(0.4), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+
+                            Button(action: submitEdit) {
+                                Text("Send")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 7)
+                                    .background(theme.accent)
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
                         }
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusLarge))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                    } else {
+                        Text(message.content)
+                            .font(.system(size: 14))
+                            .foregroundStyle(theme.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                    }
+                }
+                .background(
+                    ZStack {
+                        theme.backgroundTertiary
+                        theme.accent.opacity(isEditing ? 0 : 0.3)
+                    }
+                )
+                .clipShape(RoundedRectangle(cornerRadius: isEditing ? AppTheme.radiusXL : AppTheme.radiusLarge))
+                .overlay(
+                    RoundedRectangle(cornerRadius: isEditing ? AppTheme.radiusXL : AppTheme.radiusLarge)
+                        .stroke(theme.border.opacity(isEditing ? 0.4 : 0), lineWidth: 1)
+                )
+                .frame(maxWidth: isEditing ? .infinity : nil, alignment: .leading)
+            }
+
+            // Copy & Edit actions
+            if !isEditing {
+                UserMessageActionBar(
+                    onCopy: onCopy,
+                    onEdit: onEditSubmit != nil ? {
+                        editText = message.content
+                        withAnimation(.spring(duration: 0.35, bounce: 0.12)) {
+                            isEditing = true
+                        }
+                    } : nil
+                )
+                .opacity(isUserHovered ? 1 : 0)
+                .animation(.easeInOut(duration: 0.15), value: isUserHovered)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .frame(maxWidth: .infinity, alignment: isEditing ? .leading : .trailing)
+        .animation(.spring(duration: 0.35, bounce: 0.12), value: isEditing)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isUserHovered = hovering
+            }
+        }
     }
 
     private var assistantBubble: some View {
         let theme = themeManager.colors
         let parsed = parsedContent
+        let showActionBar = isHovered || isLastAssistantMessage
 
         return VStack(alignment: .leading, spacing: 6) {
             if message.isStreaming && message.content.isEmpty {
@@ -124,16 +218,13 @@ struct MessageBubble: View, Equatable {
                     .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusLarge))
                     .transition(.opacity)
             } else {
-                // Reasoning disclosure (if thinking content exists)
                 if let thinking = parsed.thinking {
                     reasoningDisclosure(thinking: thinking, theme: theme)
                 }
 
-                // Main content (skip if empty — e.g. still thinking during stream)
                 if !parsed.display.isEmpty {
-                    SelectableMarkdownView(markdown: parsed.display, theme: theme)
+                    MarkdownContentView(markdown: parsed.display, theme: theme)
                 } else if message.isStreaming {
-                    // Still thinking, no display content yet
                     StreamingIndicator()
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
@@ -150,13 +241,16 @@ struct MessageBubble: View, Equatable {
                     onRegenerate: isLastAssistantMessage ? onRegenerate : nil,
                     modelLabel: message.modelIdentifier
                 )
-                .opacity(isHovered || isLastAssistantMessage ? 1 : 0)
-                .animation(.easeInOut(duration: 0.15), value: isHovered)
+                .opacity(showActionBar ? 1 : 0)
+                .animation(.easeInOut(duration: 0.15), value: showActionBar)
                 .padding(.top, 2)
             }
         }
+        .contentShape(Rectangle())
         .onHover { hovering in
-            isHovered = hovering
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
         }
     }
 
@@ -199,4 +293,106 @@ struct MessageBubble: View, Equatable {
         .padding(.bottom, 4)
     }
 
+}
+
+// MARK: - EditTextView (NSTextView wrapper with keyboard shortcuts)
+
+/// A text editor that supports Escape to cancel and Enter to submit.
+/// Shift+Enter inserts a newline.
+struct EditTextView: NSViewRepresentable {
+    @Binding var text: String
+    var onEscape: () -> Void
+    var onSubmit: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        let textView = EditNSTextView()
+        textView.delegate = context.coordinator
+        textView.editDelegate = context.coordinator
+        textView.isRichText = false
+        textView.allowsUndo = true
+        textView.font = .systemFont(ofSize: 14)
+        textView.textColor = .labelColor
+        textView.backgroundColor = .clear
+        textView.drawsBackground = false
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.textContainerInset = NSSize(width: 0, height: 2)
+        textView.textContainer?.widthTracksTextView = true
+        textView.string = text
+
+        scrollView.documentView = textView
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+
+        // Focus the text view on appear
+        DispatchQueue.main.async {
+            textView.window?.makeFirstResponder(textView)
+            // Place cursor at end
+            textView.setSelectedRange(NSRange(location: textView.string.count, length: 0))
+        }
+
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        if textView.string != text {
+            textView.string = text
+        }
+    }
+
+    class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: EditTextView
+
+        init(_ parent: EditTextView) {
+            self.parent = parent
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            parent.text = textView.string
+        }
+
+        func handleEscape() {
+            parent.onEscape()
+        }
+
+        func handleSubmit() {
+            parent.onSubmit()
+        }
+    }
+}
+
+/// NSTextView subclass that intercepts Enter and Escape keys.
+class EditNSTextView: NSTextView {
+    weak var editDelegate: EditTextView.Coordinator?
+
+    override func keyDown(with event: NSEvent) {
+        let enterKeyCode: UInt16 = 36
+
+        if event.keyCode == 53 { // Escape
+            editDelegate?.handleEscape()
+            return
+        }
+
+        if event.keyCode == enterKeyCode {
+            if event.modifierFlags.contains(.shift) {
+                // Shift+Enter → newline
+                super.keyDown(with: event)
+            } else {
+                // Enter → submit
+                editDelegate?.handleSubmit()
+            }
+            return
+        }
+
+        super.keyDown(with: event)
+    }
 }

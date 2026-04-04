@@ -357,6 +357,10 @@ private struct ModelRow: View {
 
             Spacer()
 
+            if model.supportsVision {
+                CapabilityBadge(icon: "eye", theme: theme)
+            }
+
             Button(action: onToggleFavorite) {
                 Image(systemName: isFavorite ? "star.fill" : "star")
                     .font(.system(size: 13, weight: .semibold))
@@ -385,6 +389,24 @@ private struct ModelRow: View {
                 isHovered = hovering
             }
         }
+    }
+}
+
+// MARK: - Capability Badge
+
+private struct CapabilityBadge: View {
+    let icon: String
+    let theme: AppThemeColors
+
+    var body: some View {
+        Image(systemName: icon)
+            .font(.system(size: 9, weight: .medium))
+            .foregroundStyle(theme.textTertiary)
+            .frame(width: 22, height: 22)
+            .background(
+                Circle()
+                    .fill(theme.surfaceSecondary)
+            )
     }
 }
 

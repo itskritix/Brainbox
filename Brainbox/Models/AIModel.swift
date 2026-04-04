@@ -8,7 +8,13 @@ struct AIModel: Decodable, Identifiable, Hashable {
 
     var supportsVision: Bool {
         switch provider {
-        case "openai", "anthropic", "google", "mistral", "xai", "groq": return true
+        case "openai", "anthropic", "google", "xai": return true
+        case "mistral":
+            // All Mistral 3 family models have native vision
+            return true
+        case "groq":
+            // Only Llama 4 Scout is multimodal on Groq
+            return id.contains("llama-4")
         case "deepseek": return false
         default: return false
         }
@@ -20,6 +26,7 @@ struct AIModel: Decodable, Identifiable, Hashable {
         default: return false
         }
     }
+
 }
 
 let defaultModels: [AIModel] = [

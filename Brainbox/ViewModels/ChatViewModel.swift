@@ -180,6 +180,44 @@ class ChatViewModel {
         )
     }
 
+    /// Edits a user message in place: truncates everything after it, updates content, and re-sends.
+    func editAndResend(messageId: String, newContent: String, conversationId: String) {
+        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
+        cancelStreaming(finalizeCurrentMessage: false, continueQueue: false)
+
+        // Delete all messages after the edited one
+        let afterIndex = messages.index(after: index)
+        if afterIndex < messages.endIndex {
+            let removed = messages[afterIndex...]
+            messages.removeSubrange(afterIndex...)
+            for msg in removed {
+                dataService.deleteMessage(id: msg.id)
+            }
+        }
+
+        // Update the user message content
+        dataService.updateMessageContent(id: messageId, content: newContent)
+        messages[index] = messages[index].updated(content: newContent, isStreaming: false)
+
+        // Create a new assistant message and stream the response
+        let assistantMsg = dataService.createMessage(
+            conversationId: conversationId,
+            role: "assistant",
+            content: "",
+            modelIdentifier: selectedModel.id,
+            providerName: selectedModel.provider,
+            isStreaming: true,
+            attachments: []
+        )
+        messages.append(assistantMsg)
+
+        startStreaming(
+            assistantMessageId: assistantMsg.id,
+            conversationId: conversationId,
+            model: selectedModel
+        )
+    }
+
     func branch(fromMessageId messageId: String, conversationId: String) async -> String? {
         return dataService.branchConversation(fromMessageId: messageId, conversationId: conversationId)
     }

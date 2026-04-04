@@ -36,7 +36,14 @@ struct ChatView: View {
                                         messageId: message.id,
                                         conversationId: conversationId
                                     )
-                                }
+                                },
+                                onEditSubmit: message.isUser ? { newContent in
+                                    viewModel.editAndResend(
+                                        messageId: message.id,
+                                        newContent: newContent,
+                                        conversationId: conversationId
+                                    )
+                                } : nil
                             )
                             .equatable()
                             .id(message.id)

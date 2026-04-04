@@ -68,8 +68,7 @@ final class StreamingService: Sendable {
         model: AIModel,
         apiKey: String
     ) -> AsyncThrowingStream<String, Error> {
-        let provider = model.provider
-        let modelId = model.id
+        let capturedModel = model
         let capturedMessages = messages
         let capturedAttachments = attachments
 
@@ -80,12 +79,11 @@ final class StreamingService: Sendable {
                     return
                 }
                 do {
-                    let config = ProviderConfig.config(for: provider)
+                    let config = ProviderConfig.config(for: capturedModel.provider)
                     let request = try self.buildRequest(
                         messages: capturedMessages,
                         attachments: capturedAttachments,
-                        modelId: modelId,
-                        provider: provider,
+                        model: capturedModel,
                         apiKey: apiKey,
                         config: config
                     )
@@ -153,26 +151,25 @@ final class StreamingService: Sendable {
     private func buildRequest(
         messages: [Message],
         attachments: [String: (data: Data, mimeType: String, fileType: String)],
-        modelId: String,
-        provider: String,
+        model: AIModel,
         apiKey: String,
         config: ProviderConfig
     ) throws -> URLRequest {
-        switch provider {
+        switch model.provider {
         case "anthropic":
             return try buildAnthropicRequest(
                 messages: messages, attachments: attachments,
-                modelId: modelId, apiKey: apiKey, config: config
+                modelId: model.id, apiKey: apiKey, config: config
             )
         case "google":
             return try buildGoogleRequest(
                 messages: messages, attachments: attachments,
-                modelId: modelId, apiKey: apiKey, config: config
+                modelId: model.id, apiKey: apiKey, config: config
             )
         default:
             return try buildOpenAIRequest(
                 messages: messages, attachments: attachments,
-                modelId: modelId, provider: provider, apiKey: apiKey, config: config
+                model: model, apiKey: apiKey, config: config
             )
         }
     }
@@ -182,8 +179,7 @@ final class StreamingService: Sendable {
     private func buildOpenAIRequest(
         messages: [Message],
         attachments: [String: (data: Data, mimeType: String, fileType: String)],
-        modelId: String,
-        provider: String,
+        model: AIModel,
         apiKey: String,
         config: ProviderConfig
     ) throws -> URLRequest {
@@ -196,18 +192,16 @@ final class StreamingService: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(config.authPrefix + apiKey, forHTTPHeaderField: config.authHeader)
 
-        let supportsVision = provider != "deepseek"
-
         var msgArray: [[String: Any]] = []
         for msg in messages {
             let content = buildOpenAIContent(
-                message: msg, attachments: attachments, supportsVision: supportsVision
+                message: msg, attachments: attachments, supportsVision: model.supportsVision
             )
             msgArray.append(["role": msg.role, "content": content])
         }
 
         let body: [String: Any] = [
-            "model": modelId,
+            "model": model.id,
             "messages": msgArray,
             "stream": true,
         ]
