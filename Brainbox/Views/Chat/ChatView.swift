@@ -49,6 +49,7 @@ struct ChatView: View {
                     }
                     .padding(.vertical, 16)
                 }
+                .textSelection(.enabled)
                 .onChange(of: viewModel.messages.count) {
                     shouldAutoScroll = true
                     scrollToBottom(proxy: proxy)

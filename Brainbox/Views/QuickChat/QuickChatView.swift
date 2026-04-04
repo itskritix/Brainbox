@@ -1,6 +1,5 @@
 import SwiftUI
 import AppKit
-import MarkdownUI
 
 // MARK: - Visual Effect Blur (NSVisualEffectView wrapper)
 
@@ -20,34 +19,6 @@ struct VisualEffectBlur: NSViewRepresentable {
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
         nsView.material = material
         nsView.blendingMode = blendingMode
-    }
-}
-
-// MARK: - Code Copy Button (self-contained state for feedback)
-
-struct CodeCopyButton: View {
-    let content: String
-    let tintColor: Color
-    @State private var copied = false
-
-    var body: some View {
-        Button {
-            copyToClipboard(content)
-            withAnimation(.easeOut(duration: 0.15)) { copied = true }
-            Task {
-                try? await Task.sleep(for: .seconds(1.5))
-                withAnimation(.easeOut(duration: 0.15)) { copied = false }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 10, weight: .medium))
-                Text(copied ? "Copied!" : "Copy")
-                    .font(.system(size: 11, weight: .medium))
-            }
-            .foregroundStyle(copied ? tintColor : .secondary)
-        }
-        .buttonStyle(.borderless)
     }
 }
 
@@ -315,6 +286,7 @@ struct QuickChatView: View {
                 .padding(.bottom, 8)
             }
             .scrollIndicators(.hidden)
+            .textSelection(.enabled)
             .onChange(of: cvm.messages.count) { autoScroll(proxy) }
             .onChange(of: cvm.messages.last?.content) { autoScroll(proxy) }
         }
@@ -337,7 +309,6 @@ struct QuickChatView: View {
                     .padding(.vertical, 10)
                     .background(.white.opacity(0.08))
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .textSelection(.enabled)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 6)
@@ -350,9 +321,7 @@ struct QuickChatView: View {
                     }
                     .padding(.vertical, 12)
                 } else {
-                    Markdown(msg.content)
-                        .markdownTheme(quickMarkdown(theme))
-                        .textSelection(.enabled)
+                    SelectableMarkdownView(markdown: msg.content, theme: theme)
 
                     if !msg.isStreaming {
                         HStack(spacing: 2) {
@@ -400,79 +369,6 @@ struct QuickChatView: View {
             withAnimation(.easeOut(duration: 0.12)) {
                 hoveredAction = h ? id : nil
             }
-        }
-    }
-
-    // MARK: - Markdown theme
-
-    private func quickMarkdown(_ theme: AppThemeColors) -> MarkdownUI.Theme {
-        .gitHub.text {
-            ForegroundColor(theme.textPrimary)
-            BackgroundColor(.clear)
-            FontSize(14)
-        }
-        .strong {
-            FontWeight(.semibold)
-            ForegroundColor(theme.textPrimary)
-        }
-        .emphasis {
-            FontStyle(.italic)
-            ForegroundColor(theme.textPrimary)
-        }
-        .code {
-            FontFamilyVariant(.monospaced)
-            FontSize(.em(0.88))
-            ForegroundColor(theme.accent)
-            BackgroundColor(theme.backgroundTertiary)
-        }
-        .codeBlock { config in
-            VStack(spacing: 0) {
-                HStack {
-                    Text(config.language ?? "code")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(theme.textTertiary)
-
-                    Spacer()
-
-                    CodeCopyButton(content: config.content, tintColor: theme.accent)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(.white.opacity(0.03))
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    config.label
-                        .markdownTextStyle {
-                            FontFamilyVariant(.monospaced)
-                            FontSize(.em(0.85))
-                            ForegroundColor(theme.textPrimary)
-                        }
-                }
-                .padding(12)
-            }
-            .background(.white.opacity(0.04))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .markdownMargin(top: 8, bottom: 8)
-        }
-        .link {
-            ForegroundColor(theme.accent)
-        }
-        .listItem { config in
-            config.label.markdownMargin(top: 2, bottom: 2)
-        }
-        .blockquote { config in
-            HStack(spacing: 0) {
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(theme.accent.opacity(0.4))
-                    .frame(width: 3)
-                config.label
-                    .markdownTextStyle {
-                        ForegroundColor(theme.textSecondary)
-                        FontStyle(.italic)
-                    }
-                    .padding(.leading, 10)
-            }
-            .markdownMargin(top: 6, bottom: 6)
         }
     }
 

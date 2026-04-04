@@ -1,5 +1,4 @@
 import SwiftUI
-import MarkdownUI
 
 // Message bubbles are CONTENT, not navigation — never apply glass here.
 // Per Apple's Liquid Glass guidelines: glass is for navigation layer only.
@@ -96,7 +95,6 @@ struct MessageBubble: View, Equatable {
             // Text content in its own bubble
             if hasText {
                 Text(message.content)
-                    .textSelection(.enabled)
                     .font(.system(size: 14))
                     .foregroundStyle(theme.textPrimary)
                     .padding(.horizontal, 14)
@@ -133,9 +131,7 @@ struct MessageBubble: View, Equatable {
 
                 // Main content (skip if empty — e.g. still thinking during stream)
                 if !parsed.display.isEmpty {
-                    Markdown(parsed.display)
-                        .markdownTheme(markdownTheme(theme: theme))
-                        .textSelection(.enabled)
+                    SelectableMarkdownView(markdown: parsed.display, theme: theme)
                 } else if message.isStreaming {
                     // Still thinking, no display content yet
                     StreamingIndicator()
@@ -192,7 +188,6 @@ struct MessageBubble: View, Equatable {
                 Text(thinking)
                     .font(.system(size: 13))
                     .foregroundStyle(theme.textSecondary)
-                    .textSelection(.enabled)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(theme.backgroundTertiary.opacity(0.6))
@@ -204,109 +199,4 @@ struct MessageBubble: View, Equatable {
         .padding(.bottom, 4)
     }
 
-    private func markdownTheme(theme: AppThemeColors) -> MarkdownUI.Theme {
-        .gitHub.text {
-            ForegroundColor(theme.textPrimary)
-            BackgroundColor(.clear)
-            FontSize(14)
-        }
-        .heading1 { configuration in
-            configuration.label
-                .markdownMargin(top: 16, bottom: 8)
-                .markdownTextStyle {
-                    FontWeight(.bold)
-                    FontSize(22)
-                    ForegroundColor(theme.textPrimary)
-                }
-        }
-        .heading2 { configuration in
-            configuration.label
-                .markdownMargin(top: 14, bottom: 6)
-                .markdownTextStyle {
-                    FontWeight(.bold)
-                    FontSize(18)
-                    ForegroundColor(theme.textPrimary)
-                }
-        }
-        .heading3 { configuration in
-            configuration.label
-                .markdownMargin(top: 12, bottom: 4)
-                .markdownTextStyle {
-                    FontWeight(.semibold)
-                    FontSize(16)
-                    ForegroundColor(theme.textPrimary)
-                }
-        }
-        .strong {
-            FontWeight(.semibold)
-            ForegroundColor(theme.textPrimary)
-        }
-        .emphasis {
-            FontStyle(.italic)
-            ForegroundColor(theme.textPrimary)
-        }
-        .code {
-            FontFamilyVariant(.monospaced)
-            FontSize(.em(0.88))
-            ForegroundColor(theme.accent)
-            BackgroundColor(theme.backgroundTertiary)
-        }
-        .codeBlock { configuration in
-            VStack(spacing: 0) {
-                // Header: language label + copy button
-                HStack {
-                    Text(configuration.language ?? "code")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(theme.textTertiary)
-
-                    Spacer()
-
-                    CodeCopyButton(content: configuration.content, tintColor: theme.accent)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(theme.backgroundTertiary.opacity(0.6))
-
-                // Code content
-                ScrollView(.horizontal, showsIndicators: false) {
-                    configuration.label
-                        .markdownTextStyle {
-                            FontFamilyVariant(.monospaced)
-                            FontSize(.em(0.88))
-                            ForegroundColor(theme.textPrimary)
-                        }
-                }
-                .padding(12)
-            }
-            .background(theme.backgroundTertiary)
-            .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusSmall))
-            .markdownMargin(top: 8, bottom: 8)
-        }
-        .blockquote { configuration in
-            HStack(spacing: 0) {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(theme.accent.opacity(0.5))
-                    .frame(width: 3)
-                configuration.label
-                    .markdownTextStyle {
-                        ForegroundColor(theme.textSecondary)
-                        FontStyle(.italic)
-                    }
-                    .padding(.leading, 10)
-            }
-            .markdownMargin(top: 8, bottom: 8)
-        }
-        .listItem { configuration in
-            configuration.label
-                .markdownMargin(top: 2, bottom: 2)
-        }
-        .link {
-            ForegroundColor(theme.accent)
-        }
-        .thematicBreak {
-            Divider()
-                .overlay(theme.border)
-                .markdownMargin(top: 12, bottom: 12)
-        }
-    }
 }
