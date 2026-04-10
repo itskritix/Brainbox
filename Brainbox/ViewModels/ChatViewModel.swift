@@ -48,8 +48,8 @@ class ChatViewModel {
     }
 
     private(set) var activeConversationId: String?
-    private var streamingTask: Task<Void, Never>?
-    private var activeStream: ActiveStream?
+    private var streamingTasks: [String: Task<Void, Never>] = [:]
+    private var activeStreams: [String: ActiveStream] = [:]
     private var errorDismissTask: Task<Void, Never>?
     var isLocalModelLoading = false
 
@@ -72,10 +72,15 @@ class ChatViewModel {
         self.errorDismissalInterval = errorDismissalInterval
     }
 
-    /// Whether the assistant is currently streaming a response.
-    /// Uses both the derived message state and the active task as a safety check.
+    /// Whether the assistant is currently streaming a response for the active conversation.
     var isAssistantStreaming: Bool {
-        streamingTask != nil || (messages.last?.isAssistant == true && messages.last?.isStreaming == true)
+        guard let id = activeConversationId else { return false }
+        return streamingTasks[id] != nil || (messages.last?.isAssistant == true && messages.last?.isStreaming == true)
+    }
+
+    /// Conversation IDs that currently have an active streaming task (for sidebar indicators).
+    var streamingConversationIds: Set<String> {
+        Set(streamingTasks.keys)
     }
 
     /// Whether there are messages waiting to be sent after the current stream finishes.
@@ -92,7 +97,8 @@ class ChatViewModel {
             return
         }
 
-        cancelStreaming(finalizeCurrentMessage: true, continueQueue: false)
+        // Don't cancel background streams — let them continue running.
+        // Just discard queued messages for the old conversation.
         activeConversationId = conversationId
         queuedMessages = []
 
@@ -156,7 +162,8 @@ class ChatViewModel {
     }
 
     func stopStreaming() {
-        cancelStreaming(finalizeCurrentMessage: true, continueQueue: true)
+        guard let id = activeConversationId else { return }
+        cancelStreaming(conversationId: id, finalizeCurrentMessage: true, continueQueue: true)
     }
 
     func removeQueuedMessage(id: QueuedMessage.ID) {
@@ -174,7 +181,7 @@ class ChatViewModel {
     }
 
     func regenerate(messageId: String, conversationId: String) {
-        cancelStreaming(finalizeCurrentMessage: true, continueQueue: false)
+        cancelStreaming(conversationId: conversationId, finalizeCurrentMessage: true, continueQueue: false)
 
         guard let index = messages.firstIndex(where: { $0.id == messageId && $0.isAssistant }) else {
             return
@@ -199,7 +206,7 @@ class ChatViewModel {
     func editAndResend(messageId: String, newContent: String, conversationId: String) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }),
               messages[index].isUser else { return }
-        cancelStreaming(finalizeCurrentMessage: false, continueQueue: false)
+        cancelStreaming(conversationId: conversationId, finalizeCurrentMessage: false, continueQueue: false)
 
         // Delete all messages after the edited one
         let afterIndex = messages.index(after: index)
@@ -239,7 +246,7 @@ class ChatViewModel {
     }
 
     func unsubscribeMessages() {
-        cancelStreaming(finalizeCurrentMessage: true, continueQueue: false)
+        // Don't cancel background streams — only clear active conversation state
         activeConversationId = nil
         queuedMessages = []
         messages = []
@@ -301,11 +308,11 @@ class ChatViewModel {
     }
 
     private func startStreaming(assistantMessageId: String, conversationId: String, model: AIModel) {
-        streamingTask?.cancel()
-        streamingTask = nil
+        // Cancel any existing stream for this specific conversation
+        streamingTasks[conversationId]?.cancel()
+        streamingTasks[conversationId] = nil
 
-        // Single source of truth: activeStream is always set here
-        activeStream = ActiveStream(
+        activeStreams[conversationId] = ActiveStream(
             assistantMessageId: assistantMessageId,
             conversationId: conversationId,
             content: ""
@@ -322,12 +329,11 @@ class ChatViewModel {
             }
         }
 
-        streamingTask = Task {
+        streamingTasks[conversationId] = Task {
             do {
                 let stream: AsyncThrowingStream<String, Error>
 
                 if model.isLocal {
-                    // Local model: load into memory if needed, then stream directly
                     if localModelService.loadedModelId != model.id {
                         self.isLocalModelLoading = true
                         defer { self.isLocalModelLoading = false }
@@ -340,8 +346,7 @@ class ChatViewModel {
                         self.errorMessage = StreamingError.noAPIKey(model.provider).localizedDescription
                         self.dataService.finishStreaming(id: assistantMessageId, content: errorContent)
                         self.updateMessage(id: assistantMessageId, content: errorContent, isStreaming: false)
-                        self.cleanupStreamState()
-                        // Non-recoverable: clear the entire queue
+                        self.cleanupStreamState(for: conversationId)
                         self.queuedMessages.removeAll()
                         return
                     }
@@ -361,9 +366,14 @@ class ChatViewModel {
                     guard !Task.isCancelled else { return }
 
                     fullContent += chunk
-                    self.activeStream?.content = fullContent
-                    self.updateMessage(id: assistantMessageId, content: fullContent, isStreaming: true)
+                    self.activeStreams[conversationId]?.content = fullContent
 
+                    // Only update in-memory messages if this is the active conversation
+                    if conversationId == self.activeConversationId {
+                        self.updateMessage(id: assistantMessageId, content: fullContent, isStreaming: true)
+                    }
+
+                    // Always persist to DB so background streams save their progress
                     let now = Date()
                     if now.timeIntervalSince(lastPersistTime) >= 0.5 {
                         self.dataService.updateMessageContent(id: assistantMessageId, content: fullContent)
@@ -374,20 +384,23 @@ class ChatViewModel {
                 guard !Task.isCancelled else { return }
 
                 self.dataService.finishStreaming(id: assistantMessageId, content: fullContent)
-                self.updateMessage(id: assistantMessageId, content: fullContent, isStreaming: false)
-                self.errorMessage = nil
-                self.cleanupStreamState()
+                if conversationId == self.activeConversationId {
+                    self.updateMessage(id: assistantMessageId, content: fullContent, isStreaming: false)
+                    self.errorMessage = nil
+                }
+                self.cleanupStreamState(for: conversationId)
                 self.processNextQueuedMessage()
             } catch {
                 guard !Task.isCancelled else { return }
 
                 let errorContent = "Error: \(error.localizedDescription)"
                 self.dataService.finishStreaming(id: assistantMessageId, content: errorContent)
-                self.errorMessage = error.localizedDescription
-                self.updateMessage(id: assistantMessageId, content: errorContent, isStreaming: false)
-                self.cleanupStreamState()
+                if conversationId == self.activeConversationId {
+                    self.errorMessage = error.localizedDescription
+                    self.updateMessage(id: assistantMessageId, content: errorContent, isStreaming: false)
+                }
+                self.cleanupStreamState(for: conversationId)
 
-                // Only continue queue for recoverable errors; clear queue on auth/config failures
                 if let streamingError = error as? StreamingError, !streamingError.isRecoverable {
                     self.queuedMessages.removeAll()
                 } else {
@@ -397,34 +410,43 @@ class ChatViewModel {
         }
     }
 
-    /// Clears the streaming task and active stream state. Call after streaming ends
-    /// (success, error, or cancellation) to prevent stale state.
-    private func cleanupStreamState() {
-        streamingTask = nil
-        activeStream = nil
+    /// Clears the streaming task and active stream state for a specific conversation.
+    private func cleanupStreamState(for conversationId: String) {
+        streamingTasks[conversationId] = nil
+        activeStreams[conversationId] = nil
     }
 
-    private func cancelStreaming(finalizeCurrentMessage: Bool, continueQueue: Bool) {
-        if finalizeCurrentMessage, let activeStream {
-            dataService.finishStreaming(id: activeStream.assistantMessageId, content: activeStream.content)
-            updateMessage(
-                id: activeStream.assistantMessageId,
-                content: activeStream.content,
-                isStreaming: false
-            )
+    /// Cancels streaming for a specific conversation.
+    private func cancelStreaming(conversationId: String, finalizeCurrentMessage: Bool, continueQueue: Bool) {
+        if finalizeCurrentMessage, let stream = activeStreams[conversationId] {
+            dataService.finishStreaming(id: stream.assistantMessageId, content: stream.content)
+            if conversationId == activeConversationId {
+                updateMessage(
+                    id: stream.assistantMessageId,
+                    content: stream.content,
+                    isStreaming: false
+                )
+            }
         }
 
-        streamingTask?.cancel()
-        cleanupStreamState()
+        streamingTasks[conversationId]?.cancel()
+        cleanupStreamState(for: conversationId)
 
         if continueQueue {
             processNextQueuedMessage()
         }
     }
 
+    /// Cancels streaming for a given conversation (used when deleting/archiving).
+    func cancelBackgroundStream(for conversationId: String) {
+        cancelStreaming(conversationId: conversationId, finalizeCurrentMessage: true, continueQueue: false)
+    }
+
     private func processNextQueuedMessage() {
-        // Guard: don't start a new stream if one is already running
-        guard streamingTask == nil, !queuedMessages.isEmpty else {
+        // Guard: don't start a new stream if the active conversation already has one running
+        guard let activeId = activeConversationId,
+              streamingTasks[activeId] == nil,
+              !queuedMessages.isEmpty else {
             return
         }
 

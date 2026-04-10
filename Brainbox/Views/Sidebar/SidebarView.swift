@@ -8,6 +8,8 @@ struct SidebarView: View {
     @Binding var isSidebarVisible: Bool
     let searchFocusTrigger: Bool
     let keychainService: KeychainService
+    var streamingConversationIds: Set<String> = []
+    var onCancelBackgroundStream: ((String) -> Void)?
     @State private var searchText = ""
     @State private var showThemePicker = false
     @State private var showProfileEditor = false
@@ -392,7 +394,7 @@ struct SidebarView: View {
     private func sectionHeader(_ title: String, theme: AppThemeColors) -> some View {
         Text(title)
             .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(theme.textTertiary)
+            .foregroundStyle(theme.accent)
             .textCase(.uppercase)
             .tracking(0.5)
             .padding(.horizontal, 16)
@@ -404,6 +406,7 @@ struct SidebarView: View {
         ConversationRow(
             conversation: conversation,
             isSelected: selectedConversationId == conversation.id,
+            isStreaming: streamingConversationIds.contains(conversation.id),
             onSelect: {
                 selectedConversationId = conversation.id
             },
@@ -411,12 +414,14 @@ struct SidebarView: View {
                 viewModel.renameConversation(id: conversation.id, title: newTitle)
             },
             onArchive: {
+                onCancelBackgroundStream?(conversation.id)
                 if selectedConversationId == conversation.id {
                     selectedConversationId = nil
                 }
                 viewModel.archiveConversation(id: conversation.id)
             },
             onDelete: {
+                onCancelBackgroundStream?(conversation.id)
                 if selectedConversationId == conversation.id {
                     selectedConversationId = nil
                 }

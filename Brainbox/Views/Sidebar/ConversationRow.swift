@@ -5,6 +5,7 @@ struct ConversationRow: View {
     @Environment(ThemeManager.self) private var themeManager
     let conversation: Conversation
     let isSelected: Bool
+    let isStreaming: Bool
     let onSelect: () -> Void
     let onRename: (String) -> Void
     let onArchive: () -> Void
@@ -19,57 +20,56 @@ struct ConversationRow: View {
                 Spacer()
                     .frame(width: 11)
 
-                Image(systemName: "bubble.left")
-                    .font(.system(size: 11))
-                    .foregroundStyle(isSelected ? theme.accentLight : theme.textTertiary)
-                    .frame(width: 16)
-                    .padding(.trailing, 8)
-
                 Text(conversation.title)
                     .font(.system(size: 13, weight: isSelected ? .medium : .regular))
                     .foregroundStyle(isSelected ? theme.textPrimary : theme.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
 
-                Spacer()
+                Spacer(minLength: 4)
 
-                Button(action: onArchive) {
-                    Image(systemName: "archivebox")
-                        .font(.system(size: 11))
-                        .foregroundStyle(theme.textTertiary)
-                }
-                .buttonStyle(.borderless)
-                .help("Archive chat")
-                .opacity(isHovered ? 1 : 0)
-                .allowsHitTesting(isHovered)
-                .onHover { hovering in
-                    if hovering {
-                        NSCursor.pointingHand.push()
-                    } else {
-                        NSCursor.pop()
+                if isHovered {
+                    Button(action: onArchive) {
+                        Image(systemName: "archivebox")
+                            .font(.system(size: 11))
+                            .foregroundStyle(theme.textTertiary)
                     }
-                }
-                .padding(.trailing, 8)
+                    .buttonStyle(.borderless)
+                    .help("Archive chat")
+                    .onHover { hovering in
+                        if hovering {
+                            NSCursor.pointingHand.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
 
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 11))
-                        .foregroundStyle(theme.textTertiary)
-                }
-                .buttonStyle(.borderless)
-                .help("Delete chat")
-                .opacity(isHovered ? 1 : 0)
-                .allowsHitTesting(isHovered)
-                .onHover { hovering in
-                    if hovering {
-                        NSCursor.pointingHand.push()
-                    } else {
-                        NSCursor.pop()
+                    Button(action: onDelete) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 11))
+                            .foregroundStyle(theme.textTertiary)
                     }
+                    .buttonStyle(.borderless)
+                    .help("Delete chat")
+                    .onHover { hovering in
+                        if hovering {
+                            NSCursor.pointingHand.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
+                    .padding(.leading, 4)
                 }
             }
             .padding(.trailing, 12)
             .padding(.vertical, 7)
+            .overlay(alignment: .trailing) {
+                if isStreaming && !isHovered {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .padding(.trailing, 16)
+                }
+            }
             .background(
                 RoundedRectangle(cornerRadius: AppTheme.radiusSmall)
                     .fill(

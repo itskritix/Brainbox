@@ -171,7 +171,11 @@ struct ContentView: View {
                     selectedConversationId: $selectedConversationId,
                     isSidebarVisible: $isSidebarVisible,
                     searchFocusTrigger: searchFocusTrigger,
-                    keychainService: keychainService
+                    keychainService: keychainService,
+                    streamingConversationIds: chatVMUnwrapped.streamingConversationIds,
+                    onCancelBackgroundStream: { conversationId in
+                        chatVMUnwrapped.cancelBackgroundStream(for: conversationId)
+                    }
                 )
                 .frame(width: 260)
                 .transition(.move(edge: .leading))
@@ -606,6 +610,7 @@ private struct ShortcutHandlers: ViewModifier {
             }
             .onReceive(NotificationCenter.default.publisher(for: .appDeleteConversation)) { _ in
                 guard let id = selectedConversationId else { return }
+                chatVM.cancelBackgroundStream(for: id)
                 selectedConversationId = nil
                 conversationListVM.deleteConversation(id: id)
             }
