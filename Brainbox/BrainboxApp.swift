@@ -5,20 +5,24 @@ import SwiftData
 struct BrainboxApp: App {
     @State private var themeManager: ThemeManager
     @State private var keychainService: KeychainService
+    @State private var localModelService: LocalModelService
     @State private var quickChatManager: QuickChatManager
 
     init() {
         let tm = ThemeManager()
         let kc = KeychainService()
+        let lms = LocalModelService()
         _themeManager = State(initialValue: tm)
         _keychainService = State(initialValue: kc)
-        _quickChatManager = State(initialValue: QuickChatManager(themeManager: tm, keychainService: kc))
+        _localModelService = State(initialValue: lms)
+        _quickChatManager = State(initialValue: QuickChatManager(themeManager: tm, keychainService: kc, localModelService: lms))
     }
 
     var body: some Scene {
         WindowGroup(id: "main") {
-            ContentView(keychainService: keychainService)
+            ContentView(keychainService: keychainService, localModelService: localModelService)
                 .environment(themeManager)
+                .environment(localModelService)
                 .preferredColorScheme(.dark)
                 .modifier(OpenWindowInjector(manager: quickChatManager))
         }

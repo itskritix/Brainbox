@@ -359,14 +359,6 @@ struct ThemedMarkdownRenderer: MarkupVisitor {
         return result
     }
 
-    mutating func visitThematicBreak(_ thematicBreak: ThematicBreak) -> NSAttributedString {
-        // Thematic breaks are extracted as .divider segments and rendered as SwiftUI views.
-        // This is a fallback that shouldn't normally be reached.
-        return NSAttributedString(string: "\n", attributes: [
-            .font: NSFont.systemFont(ofSize: baseFontSize),
-        ])
-    }
-
     // MARK: Lists
 
     mutating func visitUnorderedList(_ unorderedList: UnorderedList) -> NSAttributedString {

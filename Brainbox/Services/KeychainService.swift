@@ -87,6 +87,7 @@ class KeychainService {
         case "xai": return "xAI"
         case "deepseek": return "DeepSeek"
         case "groq": return "Groq"
+        case "local": return "Local"
         default: return provider.capitalized
         }
     }

@@ -65,6 +65,7 @@ struct MacSearchField: NSViewRepresentable {
                 .font: parent.font,
             ]
             if let cell = field.cell as? NSSearchFieldCell {
+                cell.searchButtonCell = nil
                 cell.placeholderAttributedString = NSAttributedString(
                     string: parent.placeholder,
                     attributes: placeholderAttributes

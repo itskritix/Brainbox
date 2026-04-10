@@ -39,6 +39,10 @@ class ChatViewModel {
         didSet {
             if oldValue.id != selectedModel.id {
                 UserDefaults.standard.set(selectedModel.id, forKey: UDKey.selectedModelId)
+                // Auto-unload local model when switching to a different model
+                if oldValue.isLocal && !selectedModel.isLocal {
+                    localModelService.unloadModel()
+                }
             }
         }
     }
@@ -47,19 +51,24 @@ class ChatViewModel {
     private var streamingTask: Task<Void, Never>?
     private var activeStream: ActiveStream?
     private var errorDismissTask: Task<Void, Never>?
+    var isLocalModelLoading = false
+
     private let dataService: DataServiceProtocol
     private let streamingService = StreamingService()
     private let keychainService: KeychainService
+    private let localModelService: LocalModelService
     private let localAttachmentService = LocalAttachmentService()
     private let errorDismissalInterval: Duration
 
     init(
         dataService: DataServiceProtocol,
         keychainService: KeychainService,
+        localModelService: LocalModelService,
         errorDismissalInterval: Duration = .seconds(15)
     ) {
         self.dataService = dataService
         self.keychainService = keychainService
+        self.localModelService = localModelService
         self.errorDismissalInterval = errorDismissalInterval
     }
 
@@ -105,6 +114,12 @@ class ChatViewModel {
                 availableModels = defaultModels
             }
         }
+
+        // Always append downloaded local models regardless of API key configuration
+        let localModels = localModelService.downloadedModels.map {
+            AIModel.localModel(id: $0.id, name: $0.displayName)
+        }
+        availableModels.append(contentsOf: localModels)
 
         if let savedId = UserDefaults.standard.string(forKey: UDKey.selectedModelId),
            let model = availableModels.first(where: { $0.id == savedId }) {
@@ -182,7 +197,8 @@ class ChatViewModel {
 
     /// Edits a user message in place: truncates everything after it, updates content, and re-sends.
     func editAndResend(messageId: String, newContent: String, conversationId: String) {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
+        guard let index = messages.firstIndex(where: { $0.id == messageId }),
+              messages[index].isUser else { return }
         cancelStreaming(finalizeCurrentMessage: false, continueQueue: false)
 
         // Delete all messages after the edited one
@@ -308,23 +324,35 @@ class ChatViewModel {
 
         streamingTask = Task {
             do {
-                guard let apiKey = keychainService.apiKey(for: model.provider)?.trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty else {
-                    let errorContent = "Error: No API key configured for \(model.provider)."
-                    self.errorMessage = StreamingError.noAPIKey(model.provider).localizedDescription
-                    self.dataService.finishStreaming(id: assistantMessageId, content: errorContent)
-                    self.updateMessage(id: assistantMessageId, content: errorContent, isStreaming: false)
-                    self.cleanupStreamState()
-                    // Non-recoverable: clear the entire queue
-                    self.queuedMessages.removeAll()
-                    return
-                }
+                let stream: AsyncThrowingStream<String, Error>
 
-                let stream = streamingService.streamResponse(
-                    messages: currentMessages,
-                    attachments: attachmentMap,
-                    model: model,
-                    apiKey: apiKey
-                )
+                if model.isLocal {
+                    // Local model: load into memory if needed, then stream directly
+                    if localModelService.loadedModelId != model.id {
+                        self.isLocalModelLoading = true
+                        defer { self.isLocalModelLoading = false }
+                        try await localModelService.loadModel(id: model.id)
+                    }
+                    stream = localModelService.streamResponse(messages: currentMessages)
+                } else {
+                    guard let apiKey = keychainService.apiKey(for: model.provider)?.trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty else {
+                        let errorContent = "Error: No API key configured for \(model.provider)."
+                        self.errorMessage = StreamingError.noAPIKey(model.provider).localizedDescription
+                        self.dataService.finishStreaming(id: assistantMessageId, content: errorContent)
+                        self.updateMessage(id: assistantMessageId, content: errorContent, isStreaming: false)
+                        self.cleanupStreamState()
+                        // Non-recoverable: clear the entire queue
+                        self.queuedMessages.removeAll()
+                        return
+                    }
+
+                    stream = streamingService.streamResponse(
+                        messages: currentMessages,
+                        attachments: attachmentMap,
+                        model: model,
+                        apiKey: apiKey
+                    )
+                }
 
                 var fullContent = ""
                 var lastPersistTime = Date()

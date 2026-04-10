@@ -68,6 +68,7 @@ private class TrafficLightHostView: NSView {
 struct ContentView: View {
     @Environment(ThemeManager.self) private var themeManager
     let keychainService: KeychainService
+    let localModelService: LocalModelService
 
     @State private var dataService = SwiftDataService()
     @State private var conversationListVM: ConversationListViewModel?
@@ -95,7 +96,7 @@ struct ContentView: View {
     }
 
     private var chatVMUnwrapped: ChatViewModel {
-        chatVM ?? ChatViewModel(dataService: dataService, keychainService: keychainService)
+        chatVM ?? ChatViewModel(dataService: dataService, keychainService: keychainService, localModelService: localModelService)
     }
 
     private var profileVMUnwrapped: ProfileViewModel {
@@ -116,13 +117,19 @@ struct ContentView: View {
                 conversationListVM = ConversationListViewModel(dataService: ds)
             }
             if chatVM == nil {
-                chatVM = ChatViewModel(dataService: ds, keychainService: kc)
+                chatVM = ChatViewModel(dataService: ds, keychainService: kc, localModelService: localModelService)
             }
             if profileVM == nil {
                 profileVM = ProfileViewModel(dataService: ds)
             }
             chatVMUnwrapped.loadModels()
             conversationListVMUnwrapped.refresh()
+        }
+        .onChange(of: localModelService.downloadedModels.count) { _, _ in
+            chatVMUnwrapped.loadModels()
+        }
+        .onChange(of: keychainService.revision) { _, _ in
+            chatVMUnwrapped.loadModels()
         }
         .onChange(of: profileVMUnwrapped.activeProfileId) { _, newProfileId in
             conversationListVMUnwrapped.setProfileId(newProfileId)
@@ -620,7 +627,9 @@ private struct ShortcutHandlers: ViewModifier {
                 settingsTab = .shortcuts
                 showSettings = true
             }
-            .sheet(isPresented: $showSettings) {
+            .sheet(isPresented: $showSettings, onDismiss: {
+                chatVM.loadModels()
+            }) {
                 SettingsView(
                     keychainService: keychainService,
                     profileVM: profileVM,

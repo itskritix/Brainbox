@@ -2,6 +2,7 @@ import SwiftUI
 
 struct EmptyStateView: View {
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalModelService.self) private var localModelService
     let userName: String?
     var keychainService: KeychainService?
     let onSuggestionTapped: (String) -> Void
@@ -25,12 +26,12 @@ struct EmptyStateView: View {
 
             VStack(alignment: .leading, spacing: 24) {
                 // API keys banner
-                if let kc = keychainService, kc.configuredProviders.isEmpty {
+                if let kc = keychainService, kc.configuredProviders.isEmpty && localModelService.downloadedModels.isEmpty {
                     HStack(spacing: 8) {
                         Image(systemName: "key.fill")
                             .font(.system(size: 12))
                             .foregroundStyle(theme.warning)
-                        Text("Set up API keys in Settings to start chatting")
+                        Text("Set up API keys or download a local model in Settings to start chatting")
                             .font(.system(size: 13))
                             .foregroundStyle(theme.textSecondary)
                     }

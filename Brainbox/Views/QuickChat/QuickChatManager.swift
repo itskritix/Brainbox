@@ -15,6 +15,7 @@ class QuickChatManager {
     private var panel: FloatingPanel?
     private let themeManager: ThemeManager
     private let keychainService: KeychainService
+    private let localModelService: LocalModelService
 
     /// Set by the SwiftUI layer to reopen the main WindowGroup window.
     var openMainWindow: (() -> Void)?
@@ -22,9 +23,10 @@ class QuickChatManager {
     private let panelWidth: CGFloat = 720
     private let collapsedHeight: CGFloat = 88
 
-    init(themeManager: ThemeManager, keychainService: KeychainService) {
+    init(themeManager: ThemeManager, keychainService: KeychainService, localModelService: LocalModelService) {
         self.themeManager = themeManager
         self.keychainService = keychainService
+        self.localModelService = localModelService
         KeyboardShortcuts.onKeyUp(for: .toggleQuickChat) { [weak self] in
             self?.toggle()
         }
@@ -135,6 +137,7 @@ class QuickChatManager {
         let view = QuickChatView(
             dataService: dataService,
             keychainService: keychainService,
+            localModelService: localModelService,
             onExpand: { [weak self] convId, msgs in self?.expandToFullApp(conversationId: convId, messages: msgs) },
             onDismiss: { [weak self] in self?.dismiss() },
             onResize: { [weak self] h in self?.panel?.animateToHeight(h) }

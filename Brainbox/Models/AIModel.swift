@@ -6,6 +6,8 @@ struct AIModel: Decodable, Identifiable, Hashable {
     let provider: String
     let providerName: String
 
+    var isLocal: Bool { provider == "local" }
+
     var supportsVision: Bool {
         switch provider {
         case "openai", "anthropic", "google", "xai": return true
@@ -15,7 +17,7 @@ struct AIModel: Decodable, Identifiable, Hashable {
         case "groq":
             // Only Llama 4 Scout is multimodal on Groq
             return id.contains("llama-4")
-        case "deepseek": return false
+        case "deepseek", "local": return false
         default: return false
         }
     }
@@ -27,6 +29,9 @@ struct AIModel: Decodable, Identifiable, Hashable {
         }
     }
 
+    static func localModel(id: String, name: String) -> AIModel {
+        AIModel(id: id, name: name, provider: "local", providerName: "Local")
+    }
 }
 
 let defaultModels: [AIModel] = [

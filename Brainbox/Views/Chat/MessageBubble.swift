@@ -380,11 +380,6 @@ class EditNSTextView: NSTextView {
             return true
         }
 
-        if flags == .command, event.charactersIgnoringModifiers == "a" {
-            selectAll(nil)
-            return true
-        }
-
         return super.performKeyEquivalent(with: event)
     }
 
