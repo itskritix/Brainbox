@@ -5,6 +5,7 @@ struct LocalModelsSettingsContent: View {
     @Environment(LocalModelService.self) private var localModelService
 
     @State private var modelIdInput = ""
+    @State private var modelToDelete: LocalModelInfo?
 
     var body: some View {
         let theme = themeManager.colors
@@ -146,7 +147,7 @@ struct LocalModelsSettingsContent: View {
 
                             settingsDivider(theme: theme)
 
-                            ForEach(Array(localModelService.activeDownloads), id: \.self) { modelId in
+                            ForEach(Array(localModelService.activeDownloads).sorted(), id: \.self) { modelId in
                                 HStack(spacing: 10) {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(modelId.components(separatedBy: "/").last ?? modelId)
@@ -209,7 +210,7 @@ struct LocalModelsSettingsContent: View {
                                     Spacer()
 
                                     Button {
-                                        localModelService.deleteModel(id: model.id)
+                                        modelToDelete = model
                                     } label: {
                                         Image(systemName: "trash")
                                             .font(.system(size: 11))
@@ -239,6 +240,24 @@ struct LocalModelsSettingsContent: View {
                 }
             }
             .padding(24)
+        }
+        .alert("Delete Model", isPresented: Binding(
+            get: { modelToDelete != nil },
+            set: { if !$0 { modelToDelete = nil } }
+        )) {
+            Button("Cancel", role: .cancel) {
+                modelToDelete = nil
+            }
+            Button("Delete", role: .destructive) {
+                if let model = modelToDelete {
+                    localModelService.deleteModel(id: model.id)
+                    modelToDelete = nil
+                }
+            }
+        } message: {
+            if let model = modelToDelete {
+                Text("Are you sure you want to delete \(model.displayName)? This will remove the model files from disk.")
+            }
         }
     }
 

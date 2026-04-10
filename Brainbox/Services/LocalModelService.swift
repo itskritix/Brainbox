@@ -20,17 +20,16 @@ class LocalModelService {
     // MARK: Published State
 
     private(set) var downloadedModels: [LocalModelInfo] = []
-    var downloadProgress: [String: Double] = [:]
+    private(set) var downloadProgress: [String: Double] = [:]
     private(set) var activeDownloads: Set<String> = []
     private(set) var loadedModelId: String?
-    var errorMessage: String?
+    private(set) var errorMessage: String?
 
     var isModelLoaded: Bool { loadedModelId != nil }
 
     // MARK: Private
 
     private var modelContainer: ModelContainer?
-    private var chatSession: ChatSession?
     private var downloadTasks: [String: Task<Void, Never>] = [:]
 
     private let registryURL: URL
@@ -66,6 +65,12 @@ class LocalModelService {
         downloadProgress[id] = 0
 
         let task = Task {
+            defer {
+                activeDownloads.remove(id)
+                downloadProgress.removeValue(forKey: id)
+                downloadTasks.removeValue(forKey: id)
+            }
+
             do {
                 let config = ModelConfiguration(id: id)
 
@@ -95,20 +100,10 @@ class LocalModelService {
 
                 // Keep the container loaded since we just downloaded it
                 modelContainer = container
-                chatSession = ChatSession(container, instructions: "You are a helpful assistant.")
                 loadedModelId = id
-
-                activeDownloads.remove(id)
-                downloadProgress.removeValue(forKey: id)
-                downloadTasks.removeValue(forKey: id)
             } catch is CancellationError {
-                activeDownloads.remove(id)
-                downloadProgress.removeValue(forKey: id)
-                downloadTasks.removeValue(forKey: id)
+                // User cancelled — no error message needed
             } catch {
-                activeDownloads.remove(id)
-                downloadProgress.removeValue(forKey: id)
-                downloadTasks.removeValue(forKey: id)
                 errorMessage = "Download failed: \(error.localizedDescription)"
             }
         }
@@ -130,14 +125,19 @@ class LocalModelService {
             unloadModel()
         }
 
-        // Remove HuggingFace cached files (in sandbox Caches directory)
+        // Remove HuggingFace cached files
         let sanitized = id.replacingOccurrences(of: "/", with: "--")
-        if let cachesDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
-            let hfModelDir = cachesDir.appending(path: "huggingface/hub/models--\(sanitized)")
-            try? FileManager.default.removeItem(at: hfModelDir)
+        let fm = FileManager.default
 
-            let modelsDir = cachesDir.appending(path: "models/\(id)")
-            try? FileManager.default.removeItem(at: modelsDir)
+        // HuggingFace Swift caches to ~/.cache/huggingface/
+        let homeDir = fm.homeDirectoryForCurrentUser
+        let hfCacheDir = homeDir.appending(path: ".cache/huggingface/hub/models--\(sanitized)")
+        try? fm.removeItem(at: hfCacheDir)
+
+        // Also check app sandbox caches directory as a fallback
+        if let cachesDir = fm.urls(for: .cachesDirectory, in: .userDomainMask).first {
+            let sandboxHfDir = cachesDir.appending(path: "huggingface/hub/models--\(sanitized)")
+            try? fm.removeItem(at: sandboxHfDir)
         }
 
         downloadedModels.removeAll { $0.id == id }
@@ -155,12 +155,10 @@ class LocalModelService {
         let container = try await LLMModelFactory.shared.loadContainer(configuration: config)
 
         modelContainer = container
-        chatSession = ChatSession(container, instructions: "You are a helpful assistant.")
         loadedModelId = id
     }
 
     func unloadModel() {
-        chatSession = nil
         modelContainer = nil
         loadedModelId = nil
     }
@@ -168,11 +166,27 @@ class LocalModelService {
     // MARK: - Streaming
 
     func streamResponse(messages: [Message]) -> AsyncThrowingStream<String, Error> {
-        guard let session = chatSession else {
+        guard let container = modelContainer else {
             return AsyncThrowingStream { $0.finish(throwing: StreamingError.localModelError("No model loaded")) }
         }
 
+        // Build Chat.Message history from all prior messages (excluding the latest user message)
         let lastUserMessage = messages.last(where: { $0.role == "user" })?.content ?? ""
+        let priorMessages: [Chat.Message] = messages.dropLast().compactMap { msg in
+            switch msg.role {
+            case "user": return .user(msg.content)
+            case "assistant": return .assistant(msg.content)
+            default: return nil
+            }
+        }
+
+        // Create a fresh ChatSession per request with full conversation history
+        // This ensures conversation switching works correctly
+        let session = ChatSession(
+            container,
+            instructions: "You are a helpful assistant.",
+            history: priorMessages
+        )
 
         return AsyncThrowingStream { continuation in
             let task = Task.detached {
@@ -200,11 +214,20 @@ class LocalModelService {
 
     func diskUsage(for modelId: String) -> Int64 {
         let sanitized = modelId.replacingOccurrences(of: "/", with: "--")
-        guard let cachesDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
-            return 0
+        let fm = FileManager.default
+
+        // Check ~/.cache/huggingface/ first (HuggingFace Swift default)
+        let homeDir = fm.homeDirectoryForCurrentUser
+        let hfDir = homeDir.appending(path: ".cache/huggingface/hub/models--\(sanitized)")
+        let hfSize = directorySize(at: hfDir)
+        if hfSize > 0 { return hfSize }
+
+        // Fallback to app sandbox caches
+        if let cachesDir = fm.urls(for: .cachesDirectory, in: .userDomainMask).first {
+            let sandboxDir = cachesDir.appending(path: "huggingface/hub/models--\(sanitized)")
+            return directorySize(at: sandboxDir)
         }
-        let modelDir = cachesDir.appending(path: "huggingface/hub/models--\(sanitized)")
-        return directorySize(at: modelDir)
+        return 0
     }
 
     var totalDiskUsage: Int64 {

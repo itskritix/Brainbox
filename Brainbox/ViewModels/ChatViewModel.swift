@@ -330,8 +330,8 @@ class ChatViewModel {
                     // Local model: load into memory if needed, then stream directly
                     if localModelService.loadedModelId != model.id {
                         self.isLocalModelLoading = true
+                        defer { self.isLocalModelLoading = false }
                         try await localModelService.loadModel(id: model.id)
-                        self.isLocalModelLoading = false
                     }
                     stream = localModelService.streamResponse(messages: currentMessages)
                 } else {
