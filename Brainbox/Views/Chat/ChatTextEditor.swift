@@ -16,6 +16,7 @@ struct ChatTextEditor: NSViewRepresentable {
     var onSubmit: (() -> Void)?
     var canSubmit: Bool = true
     var onRecallLatestQueued: (() -> String?)?
+    var onEscape: (() -> Void)?
     var onFilesDropped: (([URL]) -> Void)?
     var onImagePasted: ((Data) -> Void)?
 
@@ -234,20 +235,7 @@ final class InputTextView: NSTextView {
     // MARK: Key equivalents (runs before menu commands)
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-
-        // ⌘+Delete — delete to beginning of line
-        if flags == .command && event.keyCode == 51 {
-            deleteToBeginningOfLine(nil)
-            return true
-        }
-
-        // ⌘+A — make sure select-all always works inside the text view
-        if flags == .command, event.charactersIgnoringModifiers == "a" {
-            selectAll(nil)
-            return true
-        }
-
+        if handleStandardEditingKeyEquivalent(with: event) { return true }
         return super.performKeyEquivalent(with: event)
     }
 
@@ -255,6 +243,14 @@ final class InputTextView: NSTextView {
 
     override func keyDown(with event: NSEvent) {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+        // Escape → optional dismiss callback
+        if event.keyCode == 53 {
+            if let onEscape = inputCoordinator?.parent.onEscape {
+                onEscape()
+                return
+            }
+        }
 
         // Return (no modifiers) → submit
         if event.keyCode == 36 && flags.isEmpty {

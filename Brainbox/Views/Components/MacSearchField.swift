@@ -77,13 +77,7 @@ struct MacSearchField: NSViewRepresentable {
 
 private final class NativeSearchField: NSSearchField {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-
-        if flags == .command && event.keyCode == 51 {
-            currentEditor()?.deleteToBeginningOfLine(nil)
-            return true
-        }
-
+        if handleFieldEditorEditingKeyEquivalent(with: event) { return true }
         return super.performKeyEquivalent(with: event)
     }
 }

@@ -373,13 +373,7 @@ class EditNSTextView: NSTextView {
     weak var editDelegate: EditTextView.Coordinator?
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-
-        if flags == .command && event.keyCode == 51 {
-            deleteToBeginningOfLine(nil)
-            return true
-        }
-
+        if handleStandardEditingKeyEquivalent(with: event) { return true }
         return super.performKeyEquivalent(with: event)
     }
 

@@ -46,6 +46,7 @@ struct QuickChatView: View {
     @State private var expanded = false
     @State private var hoveredAction: String?
     @State private var copiedId: String?
+    @State private var editorHeight: CGFloat = 22
 
     let onExpand: (String?, [Message]) -> Void
     let onDismiss: () -> Void
@@ -184,27 +185,28 @@ struct QuickChatView: View {
                     .padding(.top, 12)
             }
 
-            TextField("Ask anything", text: $text, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 15.5))
-                .foregroundStyle(theme.textPrimary)
-                .tint(theme.accent)
-                .lineLimit(1...4)
-                .onSubmit { if canSend { send() } }
-                .onKeyPress(keys: [.escape], phases: .down) { _ in
-                    onDismiss()
-                    return .handled
-                }
-                .onKeyPress(keys: [.upArrow], phases: .down) { _ in
-                    recallLatestQueuedMessage() ? .handled : .ignored
-                }
-                .onMoveCommand { direction in
-                    guard direction == .up else { return }
-                    _ = recallLatestQueuedMessage()
-                }
-                .padding(.horizontal, 18)
-                .padding(.top, 14)
-                .padding(.bottom, 6)
+            ChatTextEditor(
+                text: $text,
+                height: $editorHeight,
+                textColor: NSColor(theme.textPrimary),
+                font: .systemFont(ofSize: 15.5),
+                placeholderText: "Ask anything",
+                placeholderColor: NSColor(theme.textSecondary.opacity(0.5)),
+                minHeight: 22,
+                maxHeight: 80,
+                onSubmit: { if canSend { send() } },
+                canSubmit: canSend,
+                onRecallLatestQueued: {
+                    guard text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                          let recalled = cvm.popLastQueuedMessage() else { return nil }
+                    return recalled
+                },
+                onEscape: { onDismiss() }
+            )
+            .frame(height: editorHeight)
+            .padding(.horizontal, 18)
+            .padding(.top, 14)
+            .padding(.bottom, 6)
 
             HStack(spacing: 8) {
                 HStack(spacing: 5) {
@@ -264,16 +266,6 @@ struct QuickChatView: View {
         )
     }
 
-    @discardableResult
-    private func recallLatestQueuedMessage() -> Bool {
-        guard text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              let recalledText = cvm.popLastQueuedMessage() else {
-            return false
-        }
-
-        text = recalledText
-        return true
-    }
 
     private var chatArea: some View {
         ScrollViewReader { proxy in
