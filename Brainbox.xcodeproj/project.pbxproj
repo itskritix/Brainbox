@@ -625,10 +625,10 @@
 /* Begin XCRemoteSwiftPackageReference section */
 		248ABA4F2F88B98600329D4B /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
+			repositoryURL = "https://github.com/adrgrondin/mlx-swift-lm";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.31.3;
+				kind = branch;
+				branch = "port/gemma-4-model";
 			};
 		};
 		24D001002F5B000000E76BA8 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */ = {

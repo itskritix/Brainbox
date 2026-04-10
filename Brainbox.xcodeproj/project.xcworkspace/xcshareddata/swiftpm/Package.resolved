@@ -1,5 +1,5 @@
 {
-  "originHash" : "557682a3fcf264554cee6446cdb5df3e5e6b686dae65414d6c0104f25ebee41d",
+  "originHash" : "12841c447da8b29faf633ad64a06bc7ff41d90b4fbbec5d07e86f4b3045d0d4a",
   "pins" : [
     {
       "identity" : "eventsource",
@@ -31,10 +31,10 @@
     {
       "identity" : "mlx-swift-lm",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/ml-explore/mlx-swift-lm",
+      "location" : "https://github.com/adrgrondin/mlx-swift-lm",
       "state" : {
-        "revision" : "25b00d4e22e61ec9c41efda47990cd2084ec87ff",
-        "version" : "2.31.3"
+        "branch" : "port/gemma-4-model",
+        "revision" : "524b4386140f19949bfd22c8194dc5952a8004ce"
       }
     },
     {

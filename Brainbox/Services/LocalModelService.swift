@@ -48,11 +48,11 @@ class LocalModelService {
     // MARK: - Suggested Models
 
     static let suggestedModels: [(id: String, name: String, size: String)] = [
+        ("mlx-community/gemma-4-e4b-it-4bit", "Gemma 4 4B", "~5 GB"),
+        ("mlx-community/gemma-4-e2b-it-4bit", "Gemma 4 2B", "~3.5 GB"),
         ("mlx-community/Qwen3-4B-4bit", "Qwen3 4B", "~2.5 GB"),
         ("mlx-community/Llama-3.2-3B-Instruct-4bit", "Llama 3.2 3B", "~1.8 GB"),
-        ("mlx-community/gemma-2-2b-it-4bit", "Gemma 2 2B", "~1.5 GB"),
         ("mlx-community/Mistral-7B-Instruct-v0.3-4bit", "Mistral 7B", "~4 GB"),
-        ("mlx-community/Phi-4-mini-instruct-4bit", "Phi-4 Mini", "~2.4 GB"),
     ]
 
     // MARK: - Download
