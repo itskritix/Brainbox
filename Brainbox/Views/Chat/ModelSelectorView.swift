@@ -440,6 +440,7 @@ private struct ProviderIcon: View {
 }
 
 private func iconKey(for model: AIModel) -> String {
+    if model.provider == "local" { return "local" }
     if model.id.hasPrefix("openai/") {
         return "openai"
     }
@@ -468,6 +469,7 @@ private func creatorName(for model: AIModel) -> String {
     case "anthropic": return "Anthropic"
     case "deepseek": return "DeepSeek"
     case "google": return "Google"
+    case "local": return "Local"
     case "meta": return "Meta"
     case "mistral": return "Mistral"
     case "moonshot": return "Moonshot"
@@ -511,6 +513,7 @@ func iconForProvider(_ provider: String) -> String {
     case "xai": return "bolt"
     case "deepseek": return "magnifyingglass"
     case "groq": return "hare"
+    case "local": return "desktopcomputer"
     case "moonshot": return "moon"
     default: return "cpu"
     }
@@ -525,6 +528,7 @@ private func colorForProvider(_ provider: String, theme: AppThemeColors) -> Colo
     case "xai": return .purple
     case "deepseek": return .cyan
     case "groq": return .pink
+    case "local": return .teal
     case "moonshot": return Color(red: 0.2, green: 0.2, blue: 0.2)
     default: return theme.textSecondary
     }

@@ -231,6 +231,7 @@ final class BrainboxTests: XCTestCase {
         let viewModel = ChatViewModel(
             dataService: TestDataService(),
             keychainService: TestKeychainService(),
+            localModelService: LocalModelService(),
             errorDismissalInterval: .milliseconds(50)
         )
 

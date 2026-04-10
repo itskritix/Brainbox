@@ -386,6 +386,7 @@ enum StreamingError: LocalizedError {
     case invalidURL
     case invalidResponse
     case apiError(statusCode: Int, message: String)
+    case localModelError(String)
 
     var errorDescription: String? {
         switch self {
@@ -397,6 +398,8 @@ enum StreamingError: LocalizedError {
             return "Invalid response from API."
         case .apiError(let code, let message):
             return "API error (\(code)): \(message)"
+        case .localModelError(let message):
+            return "Local model error: \(message)"
         }
     }
 
@@ -413,6 +416,8 @@ enum StreamingError: LocalizedError {
             // 429 = rate limit (recoverable), 5xx = server errors (recoverable)
             // 4xx (except 429) = client errors like auth/bad request (non-recoverable)
             return statusCode == 429 || statusCode >= 500
+        case .localModelError:
+            return false
         }
     }
 }

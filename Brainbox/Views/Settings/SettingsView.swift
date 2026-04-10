@@ -4,6 +4,7 @@ import KeyboardShortcuts
 enum SettingsTab: String, CaseIterable {
     case general
     case apiKeys
+    case localModels
     case profiles
     case dataControls
     case shortcuts
@@ -38,6 +39,8 @@ struct SettingsView: View {
                         GeneralSettingsContent(dismiss: dismiss)
                     case .apiKeys:
                         APIKeysSettingsContent(keychainService: keychainService)
+                    case .localModels:
+                        LocalModelsSettingsContent()
                     case .profiles:
                         ProfilesSettingsContent(profileVM: profileVM)
                     case .dataControls:
@@ -79,6 +82,7 @@ struct SettingsView: View {
 
             sidebarItem(icon: "gearshape", label: "General", tab: .general, theme: theme)
             sidebarItem(icon: "key", label: "API Keys", tab: .apiKeys, theme: theme)
+            sidebarItem(icon: "desktopcomputer", label: "Local Models", tab: .localModels, theme: theme)
             sidebarItem(icon: "person.2", label: "Profiles", tab: .profiles, theme: theme)
             sidebarItem(icon: "archivebox", label: "Data Controls", tab: .dataControls, theme: theme)
             sidebarItem(icon: "keyboard", label: "Shortcuts", tab: .shortcuts, theme: theme)
@@ -829,7 +833,7 @@ private struct ShortcutsSettingsContent: View {
 
 // MARK: - Shared Helpers
 
-private func settingsGroup<Content: View>(
+func settingsGroup<Content: View>(
     theme: AppThemeColors,
     @ViewBuilder content: () -> Content
 ) -> some View {
@@ -844,7 +848,7 @@ private func settingsGroup<Content: View>(
     )
 }
 
-private func settingsDivider(theme: AppThemeColors) -> some View {
+func settingsDivider(theme: AppThemeColors) -> some View {
     Rectangle()
         .fill(theme.border.opacity(0.5))
         .frame(height: 0.5)

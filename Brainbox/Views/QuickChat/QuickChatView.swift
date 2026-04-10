@@ -37,6 +37,7 @@ struct QuickChatView: View {
     @Environment(ThemeManager.self) private var themeManager
     let dataService: DataServiceProtocol
     let keychainService: KeychainService
+    let localModelService: LocalModelService
 
     @State private var chatVM: ChatViewModel?
     @State private var conversationListVM: ConversationListViewModel?
@@ -51,7 +52,7 @@ struct QuickChatView: View {
     let onResize: (CGFloat) -> Void
 
     private var cvm: ChatViewModel {
-        chatVM ?? ChatViewModel(dataService: dataService, keychainService: keychainService)
+        chatVM ?? ChatViewModel(dataService: dataService, keychainService: keychainService, localModelService: localModelService)
     }
 
     private var clvm: ConversationListViewModel {
@@ -92,7 +93,7 @@ struct QuickChatView: View {
         .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
         .onAppear {
             if chatVM == nil {
-                chatVM = ChatViewModel(dataService: dataService, keychainService: keychainService)
+                chatVM = ChatViewModel(dataService: dataService, keychainService: keychainService, localModelService: localModelService)
             }
             if conversationListVM == nil {
                 conversationListVM = ConversationListViewModel(dataService: dataService)
