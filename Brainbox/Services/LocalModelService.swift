@@ -2,6 +2,11 @@ import Foundation
 import MLXLLM
 import MLXLMCommon
 
+// TODO: Switch mlx-swift-lm back to official repo (ml-explore/mlx-swift-lm)
+// once Gemma 4 support is merged upstream. Currently pinned to community fork
+// mikedoise/mlx-swift-lm@1bd99a5 for Gemma 4 text model support.
+// Track: https://github.com/ml-explore/mlx-swift-lm/issues/177
+
 // MARK: - Model Info
 
 struct LocalModelInfo: Codable, Identifiable, Hashable {

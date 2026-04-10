@@ -24,7 +24,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mikedoise/mlx-swift-lm",
       "state" : {
-        "branch" : "feature/gemma4-2.30",
+        "branch" : "1bd99a5bcbbd",
         "revision" : "1bd99a5bcbbd69d15063ff1564760259745e6bbf"
       }
     },
