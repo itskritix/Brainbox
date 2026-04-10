@@ -2,11 +2,6 @@ import Foundation
 import MLXLLM
 import MLXLMCommon
 
-// TODO: Switch mlx-swift-lm back to official repo (ml-explore/mlx-swift-lm)
-// once Gemma 4 support is merged upstream. Currently pinned to community fork
-// mikedoise/mlx-swift-lm@1bd99a5 for Gemma 4 text model support.
-// Track: https://github.com/ml-explore/mlx-swift-lm/issues/177
-
 // MARK: - Model Info
 
 struct LocalModelInfo: Codable, Identifiable, Hashable {
@@ -53,11 +48,11 @@ class LocalModelService {
     // MARK: - Suggested Models
 
     static let suggestedModels: [(id: String, name: String, size: String)] = [
-        ("mlx-community/gemma-4-e4b-it-4bit", "Gemma 4 4B", "~5 GB"),
-        ("mlx-community/gemma-4-e2b-it-4bit", "Gemma 4 2B", "~3.5 GB"),
         ("mlx-community/Qwen3-4B-4bit", "Qwen3 4B", "~2.5 GB"),
         ("mlx-community/Llama-3.2-3B-Instruct-4bit", "Llama 3.2 3B", "~1.8 GB"),
+        ("mlx-community/gemma-2-2b-it-4bit", "Gemma 2 2B", "~1.5 GB"),
         ("mlx-community/Mistral-7B-Instruct-v0.3-4bit", "Mistral 7B", "~4 GB"),
+        ("mlx-community/Phi-4-mini-instruct-4bit", "Phi-4 Mini", "~2.4 GB"),
     ]
 
     // MARK: - Download
