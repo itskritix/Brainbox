@@ -226,6 +226,32 @@ final class BrainboxTests: XCTestCase {
         XCTAssertTrue(apiErr.localizedDescription.contains("Rate limited"))
     }
 
+    func testLocalPromptMessagesKeepsFullPriorHistory() throws {
+        let messages = [
+            testMessage(role: "user", content: "my name is Ganesh", offset: 0),
+            testMessage(role: "assistant", content: "Nice to meet you.", offset: 1),
+            testMessage(role: "user", content: "latest", offset: 2),
+        ]
+
+        let promptMessages = LocalModelService.localPromptMessages(from: messages)
+
+        XCTAssertEqual(promptMessages.map(\.content), ["my name is Ganesh", "Nice to meet you.", "latest"])
+    }
+
+    func testLocalPromptMessagesIgnoresMessagesAfterLatestUser() throws {
+        let messages = (0..<8).map {
+            testMessage(role: $0.isMultiple(of: 2) ? "user" : "assistant", content: "message-\($0)", offset: $0)
+        } + [
+            testMessage(role: "user", content: "latest", offset: 8),
+            testMessage(role: "assistant", content: "draft response", offset: 9),
+        ]
+
+        let promptMessages = LocalModelService.localPromptMessages(from: messages)
+
+        XCTAssertEqual(promptMessages.last?.content, "latest")
+        XCTAssertFalse(promptMessages.contains { $0.content == "draft response" })
+    }
+
     @MainActor
     func testChatViewModelAutoDismissesErrorMessage() async throws {
         let viewModel = ChatViewModel(
@@ -241,6 +267,16 @@ final class BrainboxTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(120))
 
         XCTAssertNil(viewModel.errorMessage)
+    }
+
+    private func testMessage(role: String, content: String, offset: Int) -> Message {
+        Message(
+            _id: "message-\(offset)",
+            conversationId: "conversation-1",
+            role: role,
+            content: content,
+            createdAt: Double(offset)
+        )
     }
 }
 

@@ -59,6 +59,7 @@ class ChatViewModel {
     private let localModelService: LocalModelService
     private let localAttachmentService = LocalAttachmentService()
     private let errorDismissalInterval: Duration
+    private static let streamingUIUpdateInterval: TimeInterval = 1.0 / 15.0
 
     init(
         dataService: DataServiceProtocol,
@@ -320,15 +321,6 @@ class ChatViewModel {
 
         let currentMessages = messages.filter { $0.id != assistantMessageId }
 
-        var attachmentMap: [String: (data: Data, mimeType: String, fileType: String)] = [:]
-        for msg in currentMessages {
-            for att in msg.attachments ?? [] {
-                if let url = att.url, let data = localAttachmentService.loadData(localPath: url) {
-                    attachmentMap[att.id] = (data: data, mimeType: att.mimeType, fileType: att.fileType)
-                }
-            }
-        }
-
         streamingTasks[conversationId] = Task {
             do {
                 let stream: AsyncThrowingStream<String, Error>
@@ -339,7 +331,11 @@ class ChatViewModel {
                         defer { self.isLocalModelLoading = false }
                         try await localModelService.loadModel(id: model.id)
                     }
-                    stream = localModelService.streamResponse(messages: currentMessages)
+                    stream = localModelService.streamResponse(
+                        messages: currentMessages,
+                        conversationId: conversationId,
+                        modelId: model.id
+                    )
                 } else {
                     guard let apiKey = keychainService.apiKey(for: model.provider)?.trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty else {
                         let errorContent = "Error: No API key configured for \(model.provider)."
@@ -351,6 +347,7 @@ class ChatViewModel {
                         return
                     }
 
+                    let attachmentMap = self.attachmentMap(for: currentMessages)
                     stream = streamingService.streamResponse(
                         messages: currentMessages,
                         attachments: attachmentMap,
@@ -360,6 +357,7 @@ class ChatViewModel {
                 }
 
                 var fullContent = ""
+                var lastUIUpdateTime = Date.distantPast
                 var lastPersistTime = Date()
 
                 for try await chunk in stream {
@@ -369,12 +367,14 @@ class ChatViewModel {
                     self.activeStreams[conversationId]?.content = fullContent
 
                     // Only update in-memory messages if this is the active conversation
-                    if conversationId == self.activeConversationId {
+                    let now = Date()
+                    if conversationId == self.activeConversationId,
+                       now.timeIntervalSince(lastUIUpdateTime) >= Self.streamingUIUpdateInterval {
                         self.updateMessage(id: assistantMessageId, content: fullContent, isStreaming: true)
+                        lastUIUpdateTime = now
                     }
 
                     // Always persist to DB so background streams save their progress
-                    let now = Date()
                     if now.timeIntervalSince(lastPersistTime) >= 0.5 {
                         self.dataService.updateMessageContent(id: assistantMessageId, content: fullContent)
                         lastPersistTime = now
@@ -408,6 +408,20 @@ class ChatViewModel {
                 }
             }
         }
+    }
+
+    private func attachmentMap(
+        for messages: [Message]
+    ) -> [String: (data: Data, mimeType: String, fileType: String)] {
+        var attachmentMap: [String: (data: Data, mimeType: String, fileType: String)] = [:]
+        for msg in messages {
+            for att in msg.attachments ?? [] {
+                if let url = att.url, let data = localAttachmentService.loadData(localPath: url) {
+                    attachmentMap[att.id] = (data: data, mimeType: att.mimeType, fileType: att.fileType)
+                }
+            }
+        }
+        return attachmentMap
     }
 
     /// Clears the streaming task and active stream state for a specific conversation.

@@ -35,19 +35,28 @@ class KeychainService {
     }
 
     func setAPIKey(_ key: String, for provider: String) {
-        deleteAPIKeySilent(for: provider)
-
         guard let data = key.data(using: .utf8) else { return }
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.servicePrefix + provider,
             kSecAttrAccount as String: provider,
+        ]
+
+        let updateAttributes: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
         ]
 
-        SecItemAdd(query as CFDictionary, nil)
+        let updateStatus = SecItemUpdate(query as CFDictionary, updateAttributes as CFDictionary)
+
+        if updateStatus == errSecItemNotFound {
+            var addQuery = query
+            addQuery[kSecValueData as String] = data
+            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
+            SecItemAdd(addQuery as CFDictionary, nil)
+        }
+
         revision += 1
     }
 

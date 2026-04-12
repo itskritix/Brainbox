@@ -316,9 +316,7 @@ private struct APIKeysSettingsContent: View {
 
     private func loadKeys() {
         for provider in KeychainService.providers {
-            if keys[provider] == nil || keys[provider]?.isEmpty == true {
-                keys[provider] = keychainService.apiKey(for: provider) ?? ""
-            }
+            keys[provider] = keychainService.apiKey(for: provider) ?? ""
         }
     }
 

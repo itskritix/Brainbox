@@ -300,6 +300,7 @@ struct ContentView: View {
                         keychainService: keychainService
                     ) { prompt in
                         inputText = prompt
+                        NotificationCenter.default.post(name: .appFocusInput, object: nil)
                     } onNewChat: { }
                     .opacity(suggestionsVisible ? 1 : 0)
                     .allowsHitTesting(suggestionsVisible)

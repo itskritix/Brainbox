@@ -11,6 +11,36 @@ struct LocalModelInfo: Codable, Identifiable, Hashable {
     var sizeBytes: Int64
 }
 
+private struct LocalSessionKey: Hashable {
+    let conversationId: String
+    let modelId: String
+}
+
+private struct LocalMessageSnapshot: Equatable {
+    let role: String
+    let content: String
+}
+
+private struct LocalConversationSignature: Equatable {
+    let messages: [LocalMessageSnapshot]
+}
+
+private final class LocalChatSessionState {
+    let conversationId: String
+    let modelId: String
+    var signature: LocalConversationSignature
+    let session: ChatSession
+    var lastAccessed: UInt64
+
+    init(conversationId: String, modelId: String, signature: LocalConversationSignature, session: ChatSession, lastAccessed: UInt64) {
+        self.conversationId = conversationId
+        self.modelId = modelId
+        self.signature = signature
+        self.session = session
+        self.lastAccessed = lastAccessed
+    }
+}
+
 // MARK: - Local Model Service
 
 @MainActor
@@ -31,6 +61,9 @@ class LocalModelService {
 
     private var modelContainer: ModelContainer?
     private var downloadTasks: [String: Task<Void, Never>] = [:]
+    private var localSessions: [LocalSessionKey: LocalChatSessionState] = [:]
+    private var sessionAccessCounter: UInt64 = 0
+    private static let maxCachedSessions = 3
 
     private let registryURL: URL
 
@@ -101,6 +134,7 @@ class LocalModelService {
                 // Keep the container loaded since we just downloaded it
                 modelContainer = container
                 loadedModelId = id
+                localSessions.removeAll()
             } catch is CancellationError {
                 // User cancelled — no error message needed
             } catch {
@@ -161,45 +195,80 @@ class LocalModelService {
     func unloadModel() {
         modelContainer = nil
         loadedModelId = nil
+        localSessions.removeAll()
     }
 
     // MARK: - Streaming
 
-    func streamResponse(messages: [Message]) -> AsyncThrowingStream<String, Error> {
+    func streamResponse(
+        messages: [Message],
+        conversationId: String,
+        modelId: String
+    ) -> AsyncThrowingStream<String, Error> {
         guard let container = modelContainer else {
             return AsyncThrowingStream { $0.finish(throwing: StreamingError.localModelError("No model loaded")) }
         }
 
-        // Build Chat.Message history from all prior messages (excluding the latest user message)
-        let lastUserMessage = messages.last(where: { $0.role == "user" })?.content ?? ""
-        let priorMessages: [Chat.Message] = messages.dropLast().compactMap { msg in
-            switch msg.role {
-            case "user": return .user(msg.content)
-            case "assistant": return .assistant(msg.content)
-            default: return nil
-            }
+        let promptMessages = Self.localPromptMessages(from: messages)
+        guard let latestMessage = promptMessages.last(where: { $0.role == "user" }) else {
+            return AsyncThrowingStream { $0.finish(throwing: StreamingError.localModelError("No user message to send")) }
         }
 
-        // Create a fresh ChatSession per request with full conversation history
-        // This ensures conversation switching works correctly
-        let session = ChatSession(
-            container,
-            instructions: "You are a helpful assistant.",
-            history: priorMessages
-        )
+        let priorMessages = Array(promptMessages.dropLast())
+        let priorSignature = Self.signature(for: priorMessages)
+        let sessionKey = LocalSessionKey(conversationId: conversationId, modelId: modelId)
+
+        sessionAccessCounter += 1
+        let currentAccess = sessionAccessCounter
+
+        let session: ChatSession
+        if let cached = localSessions[sessionKey], cached.signature == priorSignature {
+            cached.lastAccessed = currentAccess
+            session = cached.session
+        } else {
+            session = ChatSession(
+                container,
+                instructions: "You are a helpful assistant.",
+                history: Self.chatMessages(from: priorMessages)
+            )
+            localSessions[sessionKey] = LocalChatSessionState(
+                conversationId: conversationId,
+                modelId: modelId,
+                signature: priorSignature,
+                session: session,
+                lastAccessed: currentAccess
+            )
+            evictSessionsIfNeeded()
+        }
 
         return AsyncThrowingStream { continuation in
             let task = Task.detached {
+                var fullContent = ""
                 do {
-                    let stream = session.streamResponse(to: lastUserMessage)
+                    let stream = session.streamResponse(to: latestMessage.content)
                     for try await chunk in stream {
                         try Task.checkCancellation()
+                        fullContent += chunk
                         continuation.yield(chunk)
+                    }
+                    await MainActor.run { [weak self] in
+                        self?.updateSessionSignature(
+                            key: sessionKey,
+                            session: session,
+                            promptMessages: promptMessages,
+                            assistantContent: fullContent
+                        )
                     }
                     continuation.finish()
                 } catch is CancellationError {
+                    await MainActor.run { [weak self] in
+                        self?.invalidateSession(key: sessionKey, session: session)
+                    }
                     continuation.finish()
                 } catch {
+                    await MainActor.run { [weak self] in
+                        self?.invalidateSession(key: sessionKey, session: session)
+                    }
                     continuation.finish(throwing: error)
                 }
             }
@@ -208,6 +277,70 @@ class LocalModelService {
                 task.cancel()
             }
         }
+    }
+
+    nonisolated static func localPromptMessages(
+        from messages: [Message]
+    ) -> [Message] {
+        guard let latestUserIndex = messages.lastIndex(where: { $0.role == "user" }) else {
+            return []
+        }
+
+        let latestUserMessage = messages[latestUserIndex]
+        let priorMessages = messages[..<latestUserIndex].filter { message in
+            (message.role == "user" || message.role == "assistant")
+                && !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
+        return priorMessages + [latestUserMessage]
+    }
+
+    private nonisolated static func chatMessages(from messages: [Message]) -> [Chat.Message] {
+        messages.compactMap { msg in
+            switch msg.role {
+            case "user": return .user(msg.content)
+            case "assistant": return .assistant(msg.content)
+            default: return nil
+            }
+        }
+    }
+
+    private nonisolated static func signature(for messages: [Message]) -> LocalConversationSignature {
+        LocalConversationSignature(messages: messages.map { LocalMessageSnapshot(role: $0.role, content: $0.content) })
+    }
+
+    private nonisolated static func signature(
+        for promptMessages: [Message],
+        assistantContent: String
+    ) -> LocalConversationSignature {
+        var messages = promptMessages.map { LocalMessageSnapshot(role: $0.role, content: $0.content) }
+        messages.append(LocalMessageSnapshot(role: "assistant", content: assistantContent))
+        return LocalConversationSignature(messages: messages)
+    }
+
+    private func updateSessionSignature(
+        key: LocalSessionKey,
+        session: ChatSession,
+        promptMessages: [Message],
+        assistantContent: String
+    ) {
+        guard localSessions[key]?.session === session else { return }
+        localSessions[key]?.signature = Self.signature(
+            for: promptMessages,
+            assistantContent: assistantContent
+        )
+    }
+
+    private func evictSessionsIfNeeded() {
+        while localSessions.count > Self.maxCachedSessions {
+            guard let oldest = localSessions.min(by: { $0.value.lastAccessed < $1.value.lastAccessed }) else { break }
+            localSessions.removeValue(forKey: oldest.key)
+        }
+    }
+
+    private func invalidateSession(key: LocalSessionKey, session: ChatSession) {
+        guard localSessions[key]?.session === session else { return }
+        localSessions.removeValue(forKey: key)
     }
 
     // MARK: - Disk Usage
