@@ -17,7 +17,14 @@ struct BrainboxApp: App {
         _keychainService = State(initialValue: kc)
         _localModelService = State(initialValue: lms)
         _quickChatManager = State(initialValue: QuickChatManager(themeManager: tm, keychainService: kc, localModelService: lms))
-        _showOnboarding = State(initialValue: !UserDefaults.standard.bool(forKey: UDKey.hasCompletedOnboarding))
+        // Skip onboarding for existing users who already have API keys or a display name
+        let isExistingUser = kc.configuredProviders.count > 0
+            || UserDefaults.standard.string(forKey: UDKey.userName) != nil
+        let completed = UserDefaults.standard.bool(forKey: UDKey.hasCompletedOnboarding) || isExistingUser
+        if isExistingUser && !UserDefaults.standard.bool(forKey: UDKey.hasCompletedOnboarding) {
+            UserDefaults.standard.set(true, forKey: UDKey.hasCompletedOnboarding)
+        }
+        _showOnboarding = State(initialValue: !completed)
     }
 
     var body: some Scene {
