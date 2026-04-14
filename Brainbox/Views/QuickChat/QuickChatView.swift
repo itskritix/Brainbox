@@ -407,6 +407,8 @@ struct QuickChatView: View {
 
     private func autoScroll(_ proxy: ScrollViewProxy) {
         guard let last = cvm.messages.last else { return }
-        withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(last.id, anchor: .bottom) }
+        Task { @MainActor in
+            withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(last.id, anchor: .bottom) }
+        }
     }
 }
