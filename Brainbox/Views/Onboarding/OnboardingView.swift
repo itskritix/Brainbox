@@ -54,9 +54,11 @@ struct OnboardingView: View {
 
     private func welcomeStep(theme: AppThemeColors) -> some View {
         VStack(spacing: 24) {
-            Image(systemName: "brain.head.profile")
-                .font(.system(size: 64))
-                .foregroundStyle(theme.accent)
+            Image("BrainboxLogo")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 120, height: 120)
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
 
             VStack(spacing: 10) {
                 Text("Welcome to Brainbox")
