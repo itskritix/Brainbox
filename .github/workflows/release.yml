@@ -64,13 +64,41 @@ jobs:
           TEAM_ID: ${{ secrets.TEAM_ID }}
         run: |
           cd build/Build/Products/Release
+
+          # Ensure hardened runtime is set on the main binary
+          codesign --force --options runtime \
+            --sign "Developer ID Application" \
+            --timestamp \
+            Brainbox.app
+
           zip -r -y Brainbox.zip Brainbox.app
 
-          xcrun notarytool submit Brainbox.zip \
+          # Submit for notarization
+          SUBMISSION=$(xcrun notarytool submit Brainbox.zip \
             --apple-id "$APPLE_ID" \
             --password "$APP_PASSWORD" \
             --team-id "$TEAM_ID" \
-            --wait
+            --wait \
+            --output-format json) || true
+
+          echo "$SUBMISSION"
+
+          # Extract submission ID and fetch detailed log
+          SUB_ID=$(echo "$SUBMISSION" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])" 2>/dev/null || echo "")
+          if [ -n "$SUB_ID" ]; then
+            echo "--- Notarization Log ---"
+            xcrun notarytool log "$SUB_ID" \
+              --apple-id "$APPLE_ID" \
+              --password "$APP_PASSWORD" \
+              --team-id "$TEAM_ID" || true
+          fi
+
+          # Check if notarization succeeded
+          STATUS=$(echo "$SUBMISSION" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+          if [ "$STATUS" != "Accepted" ]; then
+            echo "Notarization failed with status: $STATUS"
+            exit 1
+          fi
 
           xcrun stapler staple Brainbox.app
 
