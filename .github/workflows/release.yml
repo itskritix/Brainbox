@@ -1,9 +1,8 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [created]
 
 jobs:
   release:
@@ -102,14 +101,29 @@ jobs:
 
           xcrun stapler staple Brainbox.app
 
-          rm Brainbox.zip
-          zip -r -y Brainbox.zip Brainbox.app
+      - name: Create DMG
+        run: |
+          cd build/Build/Products/Release
 
-      - name: Create Release
+          # Create a temporary folder for DMG contents
+          mkdir -p dmg-contents
+          cp -R Brainbox.app dmg-contents/
+          ln -s /Applications dmg-contents/Applications
+
+          # Create the DMG
+          hdiutil create -volname "Brainbox" \
+            -srcfolder dmg-contents \
+            -ov -format UDZO \
+            Brainbox.dmg
+
+          rm -rf dmg-contents
+
+      - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/Build/Products/Release/Brainbox.zip
-          generate_release_notes: true
+          tag_name: ${{ github.event.release.tag_name }}
+          files: |
+            build/Build/Products/Release/Brainbox.dmg
 
       - name: Cleanup keychain
         if: always()
