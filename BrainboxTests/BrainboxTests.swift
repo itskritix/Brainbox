@@ -252,6 +252,20 @@ final class BrainboxTests: XCTestCase {
         XCTAssertFalse(promptMessages.contains { $0.content == "draft response" })
     }
 
+    func testGemma4AliasesResolveToMLXModels() throws {
+        XCTAssertEqual(
+            LocalModelService.resolvedModelId(for: "Gema 4"),
+            "mlx-community/gemma-4-e2b-it-4bit"
+        )
+        XCTAssertEqual(
+            LocalModelService.resolvedModelId(for: "google/gemma-4-E4B-it"),
+            "mlx-community/gemma-4-e4b-it-4bit"
+        )
+        XCTAssertTrue(LocalModelService.suggestedModels.contains {
+            $0.id == "mlx-community/gemma-4-e2b-it-4bit"
+        })
+    }
+
     @MainActor
     func testChatViewModelAutoDismissesErrorMessage() async throws {
         let viewModel = ChatViewModel(
