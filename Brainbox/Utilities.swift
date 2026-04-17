@@ -24,4 +24,5 @@ enum UDKey {
     static let activeProfileId = "activeProfileId"
     static let selectedTheme = "selectedTheme"
     static let useGlassEffect = "useGlassEffect"
+    static let hasCompletedOnboarding = "hasCompletedOnboarding"
 }

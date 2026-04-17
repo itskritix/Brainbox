@@ -7,6 +7,7 @@ struct BrainboxApp: App {
     @State private var keychainService: KeychainService
     @State private var localModelService: LocalModelService
     @State private var quickChatManager: QuickChatManager
+    @State private var showOnboarding: Bool
 
     init() {
         let tm = ThemeManager()
@@ -16,15 +17,35 @@ struct BrainboxApp: App {
         _keychainService = State(initialValue: kc)
         _localModelService = State(initialValue: lms)
         _quickChatManager = State(initialValue: QuickChatManager(themeManager: tm, keychainService: kc, localModelService: lms))
+        // Skip onboarding for existing users who already have API keys or a display name
+        let isExistingUser = kc.configuredProviders.count > 0
+            || UserDefaults.standard.string(forKey: UDKey.userName) != nil
+        let completed = UserDefaults.standard.bool(forKey: UDKey.hasCompletedOnboarding) || isExistingUser
+        if isExistingUser && !UserDefaults.standard.bool(forKey: UDKey.hasCompletedOnboarding) {
+            UserDefaults.standard.set(true, forKey: UDKey.hasCompletedOnboarding)
+        }
+        _showOnboarding = State(initialValue: !completed)
     }
 
     var body: some Scene {
         WindowGroup(id: "main") {
-            ContentView(keychainService: keychainService, localModelService: localModelService)
-                .environment(themeManager)
-                .environment(localModelService)
-                .preferredColorScheme(.dark)
-                .modifier(OpenWindowInjector(manager: quickChatManager))
+            ZStack {
+                ContentView(keychainService: keychainService, localModelService: localModelService)
+                    .environment(themeManager)
+                    .environment(localModelService)
+                    .modifier(OpenWindowInjector(manager: quickChatManager))
+
+                if showOnboarding {
+                    OnboardingView(keychainService: keychainService) {
+                        withAnimation(.easeInOut(duration: 0.4)) {
+                            showOnboarding = false
+                        }
+                    }
+                    .environment(themeManager)
+                    .transition(.opacity)
+                }
+            }
+            .preferredColorScheme(.dark)
         }
         .defaultSize(width: 1100, height: 720)
         .windowStyle(.hiddenTitleBar)

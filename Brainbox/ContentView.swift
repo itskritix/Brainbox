@@ -565,8 +565,10 @@ struct ContentView: View {
     private func scrollToBottom(proxy: ScrollViewProxy) {
         guard let lastMessage = chatVMUnwrapped.messages.last else { return }
         isAtBottom = true
-        withAnimation(.easeOut(duration: 0.2)) {
-            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+        Task { @MainActor in
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(lastMessage.id, anchor: .bottom)
+            }
         }
     }
 }

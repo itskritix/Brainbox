@@ -316,14 +316,18 @@ struct SidebarView: View {
                             }
                             .onChange(of: profileVM.activeProfileId) {
                                 profileScrollTarget = profileVM.activeProfile?.id ?? "all-chats"
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    proxy.scrollTo(profileScrollTarget, anchor: .center)
+                                Task { @MainActor in
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        proxy.scrollTo(profileScrollTarget, anchor: .center)
+                                    }
                                 }
                             }
                             .onChange(of: profileVM.profiles.count) {
                                 profileScrollTarget = profileVM.activeProfile?.id ?? "all-chats"
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    proxy.scrollTo(profileScrollTarget, anchor: .center)
+                                Task { @MainActor in
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        proxy.scrollTo(profileScrollTarget, anchor: .center)
+                                    }
                                 }
                             }
                         }

@@ -1,11 +1,93 @@
 import Foundation
 import MLXLLM
 import MLXLMCommon
+import HuggingFace
+import Tokenizers
+
+// MARK: - Bridge Types for v3 API
+
+struct HuggingFaceDownloader: Downloader {
+    private let hubClient: HubClient
+
+    init(hubClient: HubClient = .default) {
+        self.hubClient = hubClient
+    }
+
+    func download(
+        id: String,
+        revision: String?,
+        matching patterns: [String],
+        useLatest: Bool,
+        progressHandler: @Sendable @escaping (Progress) -> Void
+    ) async throws -> URL {
+        guard let repoID = Repo.ID(rawValue: id) else {
+            throw NSError(domain: "LocalModelService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid repository ID: \(id)"])
+        }
+        let revision = revision ?? "main"
+
+        return try await hubClient.downloadSnapshot(
+            of: repoID,
+            revision: revision,
+            matching: patterns,
+            progressHandler: { @MainActor progress in
+                progressHandler(progress)
+            }
+        )
+    }
+}
+
+struct TransformersTokenizerLoader: TokenizerLoader {
+    func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
+        let upstream = try await AutoTokenizer.from(modelFolder: directory)
+        return TransformersTokenizerBridge(upstream)
+    }
+}
+
+struct TransformersTokenizerBridge: MLXLMCommon.Tokenizer {
+    private let upstream: any Tokenizers.Tokenizer
+
+    init(_ upstream: any Tokenizers.Tokenizer) {
+        self.upstream = upstream
+    }
+
+    func encode(text: String, addSpecialTokens: Bool) -> [Int] {
+        upstream.encode(text: text, addSpecialTokens: addSpecialTokens)
+    }
+
+    func decode(tokenIds: [Int], skipSpecialTokens: Bool) -> String {
+        upstream.decode(tokens: tokenIds, skipSpecialTokens: skipSpecialTokens)
+    }
+
+    func convertTokenToId(_ token: String) -> Int? {
+        upstream.convertTokenToId(token)
+    }
+
+    func convertIdToToken(_ id: Int) -> String? {
+        upstream.convertIdToToken(id)
+    }
+
+    var bosToken: String? { upstream.bosToken }
+    var eosToken: String? { upstream.eosToken }
+    var unknownToken: String? { upstream.unknownToken }
+
+    func applyChatTemplate(
+        messages: [[String: any Sendable]],
+        tools: [[String: any Sendable]]?,
+        additionalContext: [String: any Sendable]?
+    ) throws -> [Int] {
+        do {
+            return try upstream.applyChatTemplate(
+                messages: messages, tools: tools, additionalContext: additionalContext)
+        } catch Tokenizers.TokenizerError.missingChatTemplate {
+            throw MLXLMCommon.TokenizerError.missingChatTemplate
+        }
+    }
+}
 
 // MARK: - Model Info
 
 struct LocalModelInfo: Codable, Identifiable, Hashable {
-    let id: String          // HuggingFace model ID, e.g. "mlx-community/Qwen3-4B-4bit"
+    let id: String
     let displayName: String
     let downloadedAt: Date
     var sizeBytes: Int64
@@ -67,6 +149,9 @@ class LocalModelService {
 
     private let registryURL: URL
 
+    private let downloader = HuggingFaceDownloader()
+    private let tokenizerLoader = TransformersTokenizerLoader()
+
     // MARK: Init
 
     init() {
@@ -81,6 +166,8 @@ class LocalModelService {
     // MARK: - Suggested Models
 
     static let suggestedModels: [(id: String, name: String, size: String)] = [
+        ("mlx-community/gemma-4-e2b-it-4bit", "Gemma 4 E2B", "~3.6 GB"),
+        ("mlx-community/gemma-4-e4b-it-4bit", "Gemma 4 E4B", "~5.2 GB"),
         ("mlx-community/Qwen3-4B-4bit", "Qwen3 4B", "~2.5 GB"),
         ("mlx-community/Llama-3.2-3B-Instruct-4bit", "Llama 3.2 3B", "~1.8 GB"),
         ("mlx-community/gemma-2-2b-it-4bit", "Gemma 2 2B", "~1.5 GB"),
@@ -88,9 +175,35 @@ class LocalModelService {
         ("mlx-community/Phi-4-mini-instruct-4bit", "Phi-4 Mini", "~2.4 GB"),
     ]
 
+    private static let modelAliases: [String: String] = [
+        "gema 4": "mlx-community/gemma-4-e2b-it-4bit",
+        "gema-4": "mlx-community/gemma-4-e2b-it-4bit",
+        "gemma 4": "mlx-community/gemma-4-e2b-it-4bit",
+        "gemma-4": "mlx-community/gemma-4-e2b-it-4bit",
+        "gemma 4 e2b": "mlx-community/gemma-4-e2b-it-4bit",
+        "gemma-4-e2b": "mlx-community/gemma-4-e2b-it-4bit",
+        "gemma 4 e4b": "mlx-community/gemma-4-e4b-it-4bit",
+        "gemma-4-e4b": "mlx-community/gemma-4-e4b-it-4bit",
+        "google/gemma-4-e2b-it": "mlx-community/gemma-4-e2b-it-4bit",
+        "google/gemma-4-e4b-it": "mlx-community/gemma-4-e4b-it-4bit",
+    ]
+
+    nonisolated static func resolvedModelId(for input: String) -> String {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = trimmed.lowercased()
+        return modelAliases[normalized] ?? trimmed
+    }
+
+    private static func displayName(for modelId: String, fallback: String) -> String {
+        suggestedModels.first(where: { $0.id == modelId })?.name ?? fallback
+    }
+
     // MARK: - Download
 
     func downloadModel(id: String, displayName: String) {
+        let id = Self.resolvedModelId(for: id)
+        let displayName = Self.displayName(for: id, fallback: displayName)
+
         guard !activeDownloads.contains(id) else { return }
         guard !downloadedModels.contains(where: { $0.id == id }) else { return }
 
@@ -105,17 +218,16 @@ class LocalModelService {
             }
 
             do {
-                let config = ModelConfiguration(id: id)
-
                 let progressHandler: @Sendable (Progress) -> Void = { [weak self] progress in
                     Task { @MainActor in
                         self?.downloadProgress[id] = progress.fractionCompleted
                     }
                 }
 
-                // Downloads from HuggingFace on first use, then loads model
-                let container = try await LLMModelFactory.shared.loadContainer(
-                    configuration: config,
+                let container = try await loadModelContainer(
+                    from: downloader,
+                    using: tokenizerLoader,
+                    id: id,
                     progressHandler: progressHandler
                 )
 
@@ -131,12 +243,10 @@ class LocalModelService {
                 downloadedModels.append(info)
                 saveRegistry()
 
-                // Keep the container loaded since we just downloaded it
                 modelContainer = container
                 loadedModelId = id
                 localSessions.removeAll()
             } catch is CancellationError {
-                // User cancelled — no error message needed
             } catch {
                 errorMessage = "Download failed: \(error.localizedDescription)"
             }
@@ -159,16 +269,13 @@ class LocalModelService {
             unloadModel()
         }
 
-        // Remove HuggingFace cached files
         let sanitized = id.replacingOccurrences(of: "/", with: "--")
         let fm = FileManager.default
 
-        // HuggingFace Swift caches to ~/.cache/huggingface/
         let homeDir = fm.homeDirectoryForCurrentUser
         let hfCacheDir = homeDir.appending(path: ".cache/huggingface/hub/models--\(sanitized)")
         try? fm.removeItem(at: hfCacheDir)
 
-        // Also check app sandbox caches directory as a fallback
         if let cachesDir = fm.urls(for: .cachesDirectory, in: .userDomainMask).first {
             let sandboxHfDir = cachesDir.appending(path: "huggingface/hub/models--\(sanitized)")
             try? fm.removeItem(at: sandboxHfDir)
@@ -185,8 +292,11 @@ class LocalModelService {
 
         unloadModel()
 
-        let config = ModelConfiguration(id: id)
-        let container = try await LLMModelFactory.shared.loadContainer(configuration: config)
+        let container = try await loadModelContainer(
+            from: downloader,
+            using: tokenizerLoader,
+            id: id
+        )
 
         modelContainer = container
         loadedModelId = id
@@ -349,13 +459,11 @@ class LocalModelService {
         let sanitized = modelId.replacingOccurrences(of: "/", with: "--")
         let fm = FileManager.default
 
-        // Check ~/.cache/huggingface/ first (HuggingFace Swift default)
         let homeDir = fm.homeDirectoryForCurrentUser
         let hfDir = homeDir.appending(path: ".cache/huggingface/hub/models--\(sanitized)")
         let hfSize = directorySize(at: hfDir)
         if hfSize > 0 { return hfSize }
 
-        // Fallback to app sandbox caches
         if let cachesDir = fm.urls(for: .cachesDirectory, in: .userDomainMask).first {
             let sandboxDir = cachesDir.appending(path: "huggingface/hub/models--\(sanitized)")
             return directorySize(at: sandboxDir)
