@@ -7,12 +7,34 @@ import Markdown
 /// Splits markdown into prose and code-block segments.
 /// Prose renders in NSTextView via Markdownosaur (full native text selection).
 /// Code blocks get a SwiftUI view with a copy button.
+///
+/// Responsiveness model (matches ChatGPT / Claude.ai):
+/// - During streaming, we split the content into a *sealed prefix* (all
+///   complete blocks, already delimited by a blank line and with any code
+///   fences closed) and a *live tail* (the block currently being streamed).
+/// - The sealed prefix is parsed with the full markdown AST and only changes
+///   when a new block boundary arrives, so the expensive NSTextView
+///   `setAttributedString` path runs at most once per block — not once per
+///   token.
+/// - The live tail renders through a lightweight `Text` view so every token
+///   update is O(length-of-current-block) instead of O(entire-message).
+/// - When `isStreaming == false` the tail is empty and everything is parsed
+///   normally, so the final rendering is identical to the pre-streaming path.
 struct MarkdownContentView: View {
     let markdown: String
+    let isStreaming: Bool
     let theme: AppThemeColors
 
+    init(markdown: String, theme: AppThemeColors, isStreaming: Bool = false) {
+        self.markdown = markdown
+        self.isStreaming = isStreaming
+        self.theme = theme
+    }
+
     var body: some View {
-        let segs = Self.parse(markdown)
+        let split = Self.splitStableAndTail(markdown: markdown, isStreaming: isStreaming)
+        let segs = Self.parse(split.stable)
+
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(segs.enumerated()), id: \.offset) { _, seg in
                 switch seg {
@@ -27,6 +49,15 @@ struct MarkdownContentView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                 }
+            }
+
+            if !split.tail.isEmpty {
+                StreamingTailView(
+                    text: split.tail,
+                    isInsideCodeFence: split.tailIsInsideCodeFence,
+                    hasStablePrefix: !split.stable.isEmpty,
+                    theme: theme
+                )
             }
         }
     }
@@ -43,6 +74,7 @@ struct MarkdownContentView: View {
     /// Code blocks and thematic breaks are extracted as dedicated segments;
     /// all other blocks are grouped into text segments for NSTextView rendering.
     private static func parse(_ markdown: String) -> [Segment] {
+        guard !markdown.isEmpty else { return [] }
         let document = Document(parsing: markdown)
         var segments: [Segment] = []
         var textBlocks: [String] = []
@@ -73,6 +105,122 @@ struct MarkdownContentView: View {
         flushText()
 
         return segments
+    }
+
+    // MARK: Stable/tail split
+
+    fileprivate struct StableTailSplit {
+        let stable: String
+        let tail: String
+        let tailIsInsideCodeFence: Bool
+    }
+
+    /// Splits `markdown` into a sealed prefix (safe to fully parse) and the
+    /// active tail that is still being streamed.
+    ///
+    /// Rules:
+    /// - If not streaming, everything is stable — no tail.
+    /// - If an odd number of ``` fences have opened, the active code block is
+    ///   unclosed. Everything up to the opening ``` is stable; the open fence
+    ///   plus its body is the tail.
+    /// - Otherwise the split point is the last blank line (`\n\n`) — content
+    ///   before it is stable, content after it is the tail.
+    /// - If no block boundary exists yet, everything is tail.
+    fileprivate static func splitStableAndTail(
+        markdown: String,
+        isStreaming: Bool
+    ) -> StableTailSplit {
+        guard isStreaming, !markdown.isEmpty else {
+            return StableTailSplit(stable: markdown, tail: "", tailIsInsideCodeFence: false)
+        }
+
+        // Detect unclosed triple-backtick code fence.
+        let fenceCount = markdown.components(separatedBy: "```").count - 1
+        if fenceCount % 2 == 1, let openRange = markdown.range(of: "```", options: .backwards) {
+            let before = String(markdown[..<openRange.lowerBound])
+            let tail = String(markdown[openRange.lowerBound...])
+            let sealedBefore = sealBeforeBoundary(before)
+            return StableTailSplit(
+                stable: sealedBefore,
+                tail: tail,
+                tailIsInsideCodeFence: true
+            )
+        }
+
+        // Find the last blank-line boundary.
+        if let range = markdown.range(of: "\n\n", options: .backwards) {
+            let stable = String(markdown[..<range.upperBound])
+            let tail = String(markdown[range.upperBound...])
+            if tail.isEmpty {
+                return StableTailSplit(stable: stable, tail: "", tailIsInsideCodeFence: false)
+            }
+            return StableTailSplit(
+                stable: stable.trimmingCharacters(in: CharacterSet.newlines).isEmpty ? "" : stable,
+                tail: tail,
+                tailIsInsideCodeFence: false
+            )
+        }
+
+        // No block boundary yet — entire message is the live tail.
+        return StableTailSplit(stable: "", tail: markdown, tailIsInsideCodeFence: false)
+    }
+
+    /// Trims trailing whitespace from the stable chunk so the split lines up
+    /// cleanly when we re-render on the next token.
+    private static func sealBeforeBoundary(_ s: String) -> String {
+        var copy = s
+        while let last = copy.last, last.isWhitespace {
+            copy.removeLast()
+        }
+        return copy
+    }
+}
+
+// MARK: - Streaming tail
+
+/// Cheap renderer for the block that is still actively streaming.
+/// Uses `Text` (with monospaced font if we're inside an unclosed code fence)
+/// so updates cost O(length-of-current-block) rather than re-parsing the
+/// whole document every token.
+private struct StreamingTailView: View {
+    let text: String
+    let isInsideCodeFence: Bool
+    let hasStablePrefix: Bool
+    let theme: AppThemeColors
+
+    var body: some View {
+        let content = displayText
+
+        Group {
+            if isInsideCodeFence {
+                Text(content)
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundStyle(theme.textPrimary)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(theme.backgroundTertiary)
+                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.radiusSmall))
+                    .padding(.top, hasStablePrefix ? 6 : 0)
+            } else {
+                Text(content)
+                    .font(.system(size: 14))
+                    .foregroundStyle(theme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, hasStablePrefix ? 4 : 0)
+            }
+        }
+        .textSelection(.enabled)
+    }
+
+    /// Strips the opening fence line so the streaming code block body renders
+    /// as code instead of showing the raw ```lang prefix.
+    private var displayText: String {
+        guard isInsideCodeFence, text.hasPrefix("```") else { return text }
+        if let newlineIndex = text.firstIndex(of: "\n") {
+            return String(text[text.index(after: newlineIndex)...])
+        }
+        return ""
     }
 }
 
@@ -134,6 +282,16 @@ struct SelectableMarkdownView: NSViewRepresentable {
     let markdown: String
     let theme: AppThemeColors
 
+    /// Caches the last rendered `(markdown, themeId)` pair so we don't
+    /// re-parse + re-attribute the document when SwiftUI reconciles the
+    /// parent view for unrelated reasons (hover, layout pass, etc).
+    final class Coordinator {
+        var lastMarkdown: String = ""
+        var lastThemeId: String = ""
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeNSView(context: Context) -> NSTextView {
         let tv = NSTextView()
         tv.isEditable = false
@@ -159,10 +317,24 @@ struct SelectableMarkdownView: NSViewRepresentable {
             .foregroundColor: NSColor(theme.accent),
             .cursor: NSCursor.pointingHand,
         ]
+
+        // Fast path: if the markdown AND theme haven't changed, SwiftUI is
+        // only re-running us because the parent re-rendered. Skip the expensive
+        // parse + attributed-string rebuild — the existing text is still valid.
+        let themeId = theme.identityToken
+        if context.coordinator.lastMarkdown == markdown,
+           context.coordinator.lastThemeId == themeId,
+           tv.textStorage?.length ?? 0 > 0 {
+            return
+        }
+
         var renderer = ThemedMarkdownRenderer(theme: theme)
         let document = Document(parsing: markdown)
         let attrStr = renderer.attributedString(from: document)
         tv.textStorage?.setAttributedString(attrStr)
+
+        context.coordinator.lastMarkdown = markdown
+        context.coordinator.lastThemeId = themeId
     }
 
     func sizeThatFits(

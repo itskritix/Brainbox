@@ -58,14 +58,32 @@ struct ChatView: View {
                 }
                 .textSelection(.enabled)
                 .onChange(of: viewModel.messages.count) {
+                    // New message appended — force the user back to the bottom
+                    // and animate once so the motion reads as a real transition.
                     shouldAutoScroll = true
-                    scrollToBottom(proxy: proxy)
+                    scrollToBottom(proxy: proxy, animated: true)
+                }
+                .onChange(of: streamingTailLength) { _, _ in
+                    // Content of the actively-streaming message grew. Follow
+                    // the bottom *without* animation so we never stack scroll
+                    // animations mid-stream (that's the stutter you get when
+                    // each token queues a 0.2s easeOut). Matches ChatGPT's
+                    // `scroll-behavior: auto` during stream + `smooth` at end.
+                    guard shouldAutoScroll else { return }
+                    scrollToBottom(proxy: proxy, animated: false)
+                }
+                .onChange(of: viewModel.isAssistantStreaming) { _, isStreaming in
+                    // Stream finished — do a final smooth scroll so the last
+                    // line lands cleanly at the bottom.
+                    if !isStreaming, shouldAutoScroll {
+                        scrollToBottom(proxy: proxy, animated: true)
+                    }
                 }
                 .overlay(alignment: .bottom) {
                     if !shouldAutoScroll {
                         Button {
                             shouldAutoScroll = true
-                            scrollToBottom(proxy: proxy)
+                            scrollToBottom(proxy: proxy, animated: true)
                         } label: {
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 12, weight: .bold))
@@ -197,11 +215,24 @@ struct ChatView: View {
         viewModel.messages.last(where: { $0.isAssistant })?.id
     }
 
-    private func scrollToBottom(proxy: ScrollViewProxy) {
-        Task { @MainActor in
+    /// Length of the actively-streaming assistant message's content.
+    /// We track length (an Int) rather than the full content string so
+    /// SwiftUI's `onChange` diff is O(1) rather than O(content-length).
+    private var streamingTailLength: Int {
+        guard let last = viewModel.messages.last,
+              last.isAssistant, last.isStreaming else { return 0 }
+        return last.content.count
+    }
+
+    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
+        if animated {
             withAnimation(.easeOut(duration: 0.2)) {
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
+        } else {
+            // No animation — streaming content calls this at ~15-30fps. If
+            // each call queued an animation they'd overlap and stutter.
+            proxy.scrollTo("bottom", anchor: .bottom)
         }
     }
 

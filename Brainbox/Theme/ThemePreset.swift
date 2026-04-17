@@ -34,16 +34,21 @@ enum ThemePreset: String, CaseIterable, Identifiable {
     // MARK: - Theme Definitions
 
     var colors: AppThemeColors {
+        var base: AppThemeColors
         switch self {
-        case .midnightPurple: return Self.midnightPurpleColors
-        case .deepOcean: return Self.deepOceanColors
-        case .roseQuartz: return Self.roseQuartzColors
-        case .emeraldNight: return Self.emeraldNightColors
-        case .sunsetGlow: return Self.sunsetGlowColors
-        case .arctic: return Self.arcticColors
-        case .noir: return Self.noirColors
-        case .cyberpunk: return Self.cyberpunkColors
+        case .midnightPurple: base = Self.midnightPurpleColors
+        case .deepOcean: base = Self.deepOceanColors
+        case .roseQuartz: base = Self.roseQuartzColors
+        case .emeraldNight: base = Self.emeraldNightColors
+        case .sunsetGlow: base = Self.sunsetGlowColors
+        case .arctic: base = Self.arcticColors
+        case .noir: base = Self.noirColors
+        case .cyberpunk: base = Self.cyberpunkColors
         }
+        // Stamp the preset name so render caches can detect theme swaps
+        // without comparing every individual color field.
+        base.identityToken = rawValue
+        return base
     }
 
     // MARK: - Midnight Purple

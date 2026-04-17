@@ -59,7 +59,24 @@ class ChatViewModel {
     private let localModelService: LocalModelService
     private let localAttachmentService = LocalAttachmentService()
     private let errorDismissalInterval: Duration
-    private static let streamingUIUpdateInterval: TimeInterval = 1.0 / 15.0
+
+    // --- Streaming cadence ---
+    //
+    // UI update interval: how often we publish streamed chunks to SwiftUI.
+    // Now that the markdown renderer only re-parses the sealed prefix (which
+    // changes at block boundaries, not per token) we can afford a faster
+    // visual cadence. 24fps ≈ film rate — smooth enough that individual
+    // token arrivals don't read as jerky, but well below SwiftUI's 60fps
+    // reconcile cap so we leave headroom for scroll + hit-testing.
+    private static let streamingUIUpdateInterval: TimeInterval = 1.0 / 24.0
+
+    // DB persist interval: how often we checkpoint stream progress to
+    // SwiftData. Saves happen on the main actor (SwiftData main context is
+    // @MainActor), so each one competes with the paint thread. 1.5s is a
+    // good compromise between "stream survives a crash" and "don't spam the
+    // main thread with SQLite writes while the user is typing". The final
+    // `finishStreaming` always runs, so nothing is lost at the tail.
+    private static let streamingPersistInterval: TimeInterval = 1.5
 
     init(
         dataService: DataServiceProtocol,
@@ -374,8 +391,13 @@ class ChatViewModel {
                         lastUIUpdateTime = now
                     }
 
-                    // Always persist to DB so background streams save their progress
-                    if now.timeIntervalSince(lastPersistTime) >= 0.5 {
+                    // Always persist to DB so background streams save their
+                    // progress — but infrequently, because SwiftData's
+                    // main-context `context.save()` competes with the UI
+                    // thread. The final `finishStreaming` below is the
+                    // authoritative write, so intermediate saves are only a
+                    // crash-safety net.
+                    if now.timeIntervalSince(lastPersistTime) >= Self.streamingPersistInterval {
                         self.dataService.updateMessageContent(id: assistantMessageId, content: fullContent)
                         lastPersistTime = now
                     }

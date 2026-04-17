@@ -32,4 +32,9 @@ struct AppThemeColors {
     // Semantic
     let error: Color
     let warning: Color
+
+    /// Stable identity string used by cache layers (e.g. `SelectableMarkdownView`)
+    /// to detect that the active theme changed without having to compare every
+    /// individual color. Set by `ThemeManager` when it constructs the palette.
+    var identityToken: String = ""
 }

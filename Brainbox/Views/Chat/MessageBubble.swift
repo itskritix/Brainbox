@@ -223,7 +223,11 @@ struct MessageBubble: View, Equatable {
                 }
 
                 if !parsed.display.isEmpty {
-                    MarkdownContentView(markdown: parsed.display, theme: theme)
+                    MarkdownContentView(
+                        markdown: parsed.display,
+                        theme: theme,
+                        isStreaming: message.isStreaming
+                    )
                 } else if message.isStreaming {
                     StreamingIndicator()
                         .padding(.horizontal, 14)
