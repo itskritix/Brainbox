@@ -49,6 +49,15 @@ struct ModelSelectorView: View {
                 )
                 Text(selectedModel.name)
                     .font(.system(size: 12, weight: .medium))
+                    // Without lineLimit, a cramped input row makes SwiftUI
+                    // fall back to character-level wrapping ("Ge / min / i 3")
+                    // on long names like "Gemini 3 Pro Preview". Truncate with
+                    // an ellipsis instead, and let the text shrink a little
+                    // before giving up.
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .minimumScaleFactor(0.85)
+                    .fixedSize(horizontal: false, vertical: true)
                 Image(systemName: showPicker ? "chevron.up" : "chevron.down")
                     .font(.system(size: 9, weight: .semibold))
             }

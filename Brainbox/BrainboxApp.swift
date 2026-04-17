@@ -45,10 +45,18 @@ struct BrainboxApp: App {
                     .transition(.opacity)
                 }
             }
+            // Hard lower bound on the window geometry. Chosen so the chat
+            // column still has ~460pt of breathing room when the sidebar is
+            // open (260pt sidebar + 460pt chat = 720pt), and the input row
+            // with the model pill never gets squeezed into character-stack
+            // wrap territory. Pair with `.windowResizability(.contentMinSize)`
+            // below so the user physically cannot drag the window smaller.
+            .frame(minWidth: 720, minHeight: 480)
             .preferredColorScheme(.dark)
         }
         .defaultSize(width: 1100, height: 720)
         .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentMinSize)
         .commands { AppCommands() }
     }
 }

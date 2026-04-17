@@ -76,6 +76,38 @@ struct ContentView: View {
     @State private var profileVM: ProfileViewModel?
     @State private var selectedConversationId: String?
     @State private var isSidebarVisible = true
+    // Auto-compact sidebar behaviour (mirrors Finder / Mail):
+    //
+    // - Below `compactWidthThreshold`, the sidebar is force-hidden so the
+    //   chat column doesn't get crushed.
+    // - When the window widens back above the threshold, we restore whatever
+    //   the sidebar's visibility was *before* entering compact mode, so the
+    //   user's explicit choice is preserved across resize jitter.
+    // - Manual toggles while in compact mode also update the remembered
+    //   preference, so "I closed the sidebar and then made the window wide"
+    //   keeps the sidebar closed.
+    @State private var isInCompactLayout = false
+    @State private var sidebarPreferenceBeforeCompact = true
+    private let compactWidthThreshold: CGFloat = 820
+
+    // Sidebar motion curves.
+    //
+    // - Drawer close is the motion users notice most — the backdrop has to
+    //   fade AND the panel has to slide off-screen, both over a distance
+    //   large enough that any front-loaded curve reads as a snap. Springs
+    //   (even gentle ones with bounce: 0.1) put ~70% of their motion in the
+    //   first 20% of the duration, which is exactly why a 0.4s spring still
+    //   *felt* instant. `easeInOut(duration: 0.38)` distributes motion
+    //   evenly: noticeable ramp-up, clear middle, perceptible settle. Same
+    //   vocabulary Finder uses for its column-width drags.
+    // - The inline push keeps a shorter ease — it's just a layout change,
+    //   not a hero transition, and matches ConversationRow / SidebarView.
+    private static let drawerAnimation: Animation = .easeInOut(duration: 0.38)
+    private static let inlineSidebarAnimation: Animation = .easeInOut(duration: 0.2)
+    // Single source of truth for sidebar width — referenced both in the
+    // sidebar's own `.frame(width:)` and the drawer's offscreen offset
+    // so they can never drift out of sync.
+    private static let sidebarWidth: CGFloat = 260
     @State private var isFullScreen = false
     @State private var didExpandFromQuickChat = false
     @State private var inputText = ""
@@ -148,7 +180,7 @@ struct ContentView: View {
             chatVM: chatVMUnwrapped,
             profileVM: profileVMUnwrapped,
             selectedConversationId: $selectedConversationId,
-            isSidebarVisible: $isSidebarVisible,
+            isSidebarVisible: sidebarVisibleBinding,
             showModelPicker: $showModelPicker,
             showSettings: $showSettings,
             settingsTab: $settingsTab,
@@ -162,36 +194,82 @@ struct ContentView: View {
 
     private var mainLayout: some View {
         let theme = themeManager.colors
+        let sidebar = SidebarView(
+            viewModel: conversationListVMUnwrapped,
+            profileVM: profileVMUnwrapped,
+            selectedConversationId: $selectedConversationId,
+            isSidebarVisible: sidebarVisibleBinding,
+            searchFocusTrigger: searchFocusTrigger,
+            keychainService: keychainService,
+            streamingConversationIds: chatVMUnwrapped.streamingConversationIds,
+            onCancelBackgroundStream: { conversationId in
+                chatVMUnwrapped.cancelBackgroundStream(for: conversationId)
+            }
+        )
+        .frame(width: Self.sidebarWidth)
 
-        return HStack(spacing: 0) {
-            if isSidebarVisible {
-                SidebarView(
-                    viewModel: conversationListVMUnwrapped,
-                    profileVM: profileVMUnwrapped,
-                    selectedConversationId: $selectedConversationId,
-                    isSidebarVisible: $isSidebarVisible,
-                    searchFocusTrigger: searchFocusTrigger,
-                    keychainService: keychainService,
-                    streamingConversationIds: chatVMUnwrapped.streamingConversationIds,
-                    onCancelBackgroundStream: { conversationId in
-                        chatVMUnwrapped.cancelBackgroundStream(for: conversationId)
-                    }
-                )
-                .frame(width: 260)
-                .transition(.move(edge: .leading))
+        // Two rendering modes:
+        // - Wide windows: sidebar lives INLINE in the HStack and pushes the
+        //   chat column aside. Classic macOS layout.
+        // - Narrow windows (compact): sidebar floats OVER the chat as a
+        //   drawer, with a tap-to-dismiss backdrop. This matches how Finder,
+        //   Mail, and iPadOS split views behave below their min width.
+        return ZStack(alignment: .leading) {
+            // 1. Base layer — chat, plus the inline sidebar when not compact.
+            HStack(spacing: 0) {
+                if isSidebarVisible && !isInCompactLayout {
+                    sidebar
+                        .transition(.move(edge: .leading))
+                }
+
+                detailView
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            detailView
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // 2. Overlay drawer — compact mode only. Animates via
+            //    CONTINUOUS PROPERTIES (offset + opacity), not via
+            //    conditional mount + `.transition(...)`.
+            //
+            //    Why: SwiftUI's insertion/removal transitions through a
+            //    conditional-rendered parent were unreliable on macOS —
+            //    tapping the backdrop would skip the slide entirely and
+            //    read as an instant snap. Continuous property animations
+            //    driven by `.animation(_:value:)` are deterministic: they
+            //    interpolate every frame between the old and new values,
+            //    regardless of transaction state.
+            //
+            //    The drawer stays mounted while in compact mode; when
+            //    hidden it sits at x: -sidebarWidth with opacity 0 and
+            //    hit-testing disabled.
+            if isInCompactLayout {
+                let drawerHidden = !isSidebarVisible
+
+                Color.black
+                    .opacity(drawerHidden ? 0 : 0.4)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { toggleSidebarManually(to: false) }
+                    .allowsHitTesting(!drawerHidden)
+                    .animation(Self.drawerAnimation, value: isSidebarVisible)
+
+                sidebar
+                    .shadow(
+                        color: .black.opacity(drawerHidden ? 0 : 0.35),
+                        radius: 16, x: 4, y: 0
+                    )
+                    .offset(x: drawerHidden ? -Self.sidebarWidth : 0)
+                    .allowsHitTesting(!drawerHidden)
+                    .animation(Self.drawerAnimation, value: isSidebarVisible)
+            }
         }
-        .animation(.easeInOut(duration: 0.2), value: isSidebarVisible)
         .background(theme.backgroundPrimary)
         .overlay(alignment: .topLeading) {
+            // The "open sidebar" button is visible in BOTH layout modes when
+            // the sidebar is hidden. In compact mode it opens the drawer
+            // overlay; in wide mode it inserts the sidebar inline.
             if !isSidebarVisible {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isSidebarVisible = true
-                    }
+                    toggleSidebarManually(to: true)
                 } label: {
                     Image(systemName: "sidebar.left")
                         .font(.system(size: 14, weight: .medium))
@@ -203,11 +281,103 @@ struct ContentView: View {
                 .padding(.top, 7)
             }
         }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { newWidth in
+            applyCompactLayout(for: newWidth)
+        }
+        .onChange(of: selectedConversationId) { _, _ in
+            // Tapping a conversation in the overlay drawer should auto-dismiss
+            // it — same UX as iPadOS. In wide mode this is a no-op because
+            // `isInCompactLayout` is false and the sidebar stays pinned.
+            if isInCompactLayout && isSidebarVisible {
+                toggleSidebarManually(to: false)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in
             isFullScreen = true
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in
             isFullScreen = false
+        }
+    }
+
+    /// A Binding we hand to children (SidebarView, ShortcutHandlers, etc).
+    /// Every external write goes through `toggleSidebarManually` so the
+    /// remembered preference stays in sync — otherwise a keyboard-shortcut
+    /// close at wide width would silently re-open on the next compact-mode
+    /// exit.
+    private var sidebarVisibleBinding: Binding<Bool> {
+        Binding(
+            get: { isSidebarVisible },
+            set: { newValue in toggleSidebarManually(to: newValue) }
+        )
+    }
+
+    /// Called whenever the window width changes. Toggles compact mode and
+    /// preserves the user's sidebar preference across compact transitions.
+    private func applyCompactLayout(for width: CGFloat) {
+        let shouldBeCompact = width < compactWidthThreshold
+
+        if shouldBeCompact, !isInCompactLayout {
+            // Entering compact mode — remember current intent, then close.
+            // Wrapped in `withAnimation` so the inline sidebar's exit slide
+            // and the compact-mode flip share one transaction.
+            sidebarPreferenceBeforeCompact = isSidebarVisible
+            withAnimation(Self.drawerAnimation) {
+                isInCompactLayout = true
+                if isSidebarVisible {
+                    isSidebarVisible = false
+                }
+            }
+        } else if !shouldBeCompact, isInCompactLayout {
+            // Leaving compact mode. Two paths:
+            //
+            // 1. Drawer was ALREADY OPEN and user wants it open in wide mode.
+            //    The overlay drawer and the inline sidebar both render the
+            //    same SidebarView at the same leading x, same width. If we
+            //    wrap the swap in `withAnimation`, the inline sidebar fires
+            //    its `.transition(.move(edge: .leading))` and slides in
+            //    from -260 while the drawer vanishes at x=0 — which reads
+            //    as "close + reopen" even though the panel never moved.
+            //    Fix: SILENT SWAP. No withAnimation → no transition fires.
+            //    The drawer unmounts and the inline mounts in the same
+            //    render pass at the same visual position. User sees the
+            //    scrim disappear and the chat column reflow; the sidebar
+            //    panel itself stays put.
+            //
+            // 2. Drawer was closed (or user's preference is closed). No
+            //    visual overlap, so animate normally with the inline curve.
+            let drawerWasVisible = isSidebarVisible
+            let preferenceKeepsItOpen = sidebarPreferenceBeforeCompact
+
+            if drawerWasVisible && preferenceKeepsItOpen {
+                // Silent swap — drawer ↔ inline at identical position.
+                isInCompactLayout = false
+            } else {
+                withAnimation(Self.inlineSidebarAnimation) {
+                    isInCompactLayout = false
+                    if isSidebarVisible != sidebarPreferenceBeforeCompact {
+                        isSidebarVisible = sidebarPreferenceBeforeCompact
+                    }
+                }
+            }
+        }
+    }
+
+    /// Explicit user-driven sidebar toggle. Updates both the current
+    /// visibility AND the remembered preference, so a manual close at
+    /// wide width survives a resize loop.
+    ///
+    /// Picks the animation curve based on *current* mode — the longer
+    /// drawer ease when overlaying so the scrim fade + panel slide read
+    /// as a real transition, the shorter inline ease when pushing the
+    /// HStack layout.
+    private func toggleSidebarManually(to visible: Bool) {
+        sidebarPreferenceBeforeCompact = visible
+        let animation = isInCompactLayout ? Self.drawerAnimation : Self.inlineSidebarAnimation
+        withAnimation(animation) {
+            isSidebarVisible = visible
         }
     }
 
