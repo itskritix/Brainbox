@@ -8,7 +8,6 @@ struct OnboardingView: View {
     @State private var currentStep: OnboardingStep = .welcome
     @State private var displayName: String = ""
     @State private var apiKeys: [String: String] = [:]
-    @State private var savedProviders: Set<String> = []
 
     private enum OnboardingStep: Int, CaseIterable {
         case welcome = 0
@@ -19,6 +18,8 @@ struct OnboardingView: View {
 
     var body: some View {
         let theme = themeManager.colors
+        // Observe keychain changes so onboarding rows reflect real state.
+        let _ = keychainService.revision
 
         VStack(spacing: 0) {
             Spacer()
@@ -119,8 +120,11 @@ struct OnboardingView: View {
                         .stroke(theme.border, lineWidth: 1)
                 )
                 .onSubmit {
-                    saveDisplayName()
-                    currentStep = .apiKeys
+                    // Keep validation in sync with the Continue button below.
+                    if displayName.trimmingCharacters(in: .whitespaces).count >= 2 {
+                        saveDisplayName()
+                        currentStep = .apiKeys
+                    }
                 }
 
             HStack(spacing: 12) {
@@ -162,7 +166,11 @@ struct OnboardingView: View {
     // MARK: - Step 3: API Keys
 
     private func apiKeysStep(theme: AppThemeColors) -> some View {
-        VStack(spacing: 20) {
+        // Compute once per render to avoid repeated Keychain lookups in the
+        // button label below (configuredProviders iterates all providers).
+        let hasAnyConfiguredProvider = !keychainService.configuredProviders.isEmpty
+
+        return VStack(spacing: 20) {
             Image(systemName: "key.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(theme.accent)
@@ -203,17 +211,17 @@ struct OnboardingView: View {
                 Button {
                     currentStep = .ready
                 } label: {
-                    Text(keychainService.configuredProviders.isEmpty ? "Skip for now" : "Continue")
-                        .font(.system(size: 13, weight: keychainService.configuredProviders.isEmpty ? .regular : .semibold))
-                        .foregroundStyle(keychainService.configuredProviders.isEmpty ? theme.textSecondary : .white)
+                    Text(hasAnyConfiguredProvider ? "Continue" : "Skip for now")
+                        .font(.system(size: 13, weight: hasAnyConfiguredProvider ? .semibold : .regular))
+                        .foregroundStyle(hasAnyConfiguredProvider ? .white : theme.textSecondary)
                         .padding(.horizontal, 24)
                         .padding(.vertical, 8)
-                        .background(keychainService.configuredProviders.isEmpty ? theme.surfacePrimary : theme.accent)
+                        .background(hasAnyConfiguredProvider ? theme.accent : theme.surfacePrimary)
                         .clipShape(Capsule())
                         .overlay(
-                            keychainService.configuredProviders.isEmpty
-                                ? Capsule().stroke(theme.border, lineWidth: 1)
-                                : nil
+                            hasAnyConfiguredProvider
+                                ? nil
+                                : Capsule().stroke(theme.border, lineWidth: 1)
                         )
                 }
                 .buttonStyle(.borderless)
@@ -223,7 +231,10 @@ struct OnboardingView: View {
 
     private func onboardingApiKeyRow(provider: String, theme: AppThemeColors) -> some View {
         let displayName = KeychainService.providerDisplayName(provider)
-        let hasKey = savedProviders.contains(provider)
+        // Read real keychain state rather than a local cache so the row stays in
+        // sync with keys configured outside this view (e.g. via Settings) and
+        // with revision-driven re-renders.
+        let hasKey = keychainService.hasKey(for: provider)
         let binding = Binding<String>(
             get: { apiKeys[provider] ?? "" },
             set: { apiKeys[provider] = $0 }
@@ -352,8 +363,9 @@ struct OnboardingView: View {
     private func saveApiKey(for provider: String) {
         let key = (apiKeys[provider] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
+        // setAPIKey bumps keychainService.revision, which triggers a re-render
+        // so rows pick up the new hasKey(for:) value automatically.
         keychainService.setAPIKey(key, for: provider)
-        savedProviders.insert(provider)
     }
 
     private func completeOnboarding() {
